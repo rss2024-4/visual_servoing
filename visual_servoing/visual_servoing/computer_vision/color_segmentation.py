@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import os
 
 #################### X-Y CONVENTIONS #########################
 # 0,0  X  > > > > >
@@ -32,11 +33,9 @@ def cd_color_segmentation(img, template):
 		bbox: ((x1, y1), (x2, y2)); the bounding box of the cone, unit in px
 				(x1, y1) is the top left of the bbox and (x2, y2) is the bottom right of the bbox
 	"""
-	########## YOUR CODE STARTS HERE ##########
+	
 
-	bounding_box = ((0,0),(0,0))
-
-	########### YOUR CODE ENDS HERE ###########
-
-	# Return bounding box
-	return bounding_box
+if __name__ == '__main__':
+	print(os.getcwd())
+	img = cv2.imread('/src/visual_servoing/visual_servoing/visual_servoing/computer_vision/test_images_cone/test1.jpg')
+	image_print(img)
