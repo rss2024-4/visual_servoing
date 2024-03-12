@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import os
 
 #################### X-Y CONVENTIONS #########################
 # 0,0  X  > > > > >
@@ -14,6 +13,8 @@ import os
 #  v
 ###############################################################
 
+KERNEL = np.ones((5, 5), np.uint8)
+
 def image_print(img):
 	"""
 	Helper function to print out images, for debugging. Pass them in as a list.
@@ -23,7 +24,7 @@ def image_print(img):
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
 
-def cd_color_segmentation(img, template):
+def cd_color_segmentation(img, template=None):
 	"""
 	Implement the cone detection using color segmentation algorithm
 	Input:
@@ -33,9 +34,12 @@ def cd_color_segmentation(img, template):
 		bbox: ((x1, y1), (x2, y2)); the bounding box of the cone, unit in px
 				(x1, y1) is the top left of the bbox and (x2, y2) is the bottom right of the bbox
 	"""
-	
+	img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+	eroded = cv2.erode(img, KERNEL, iterations=1)
+	pre_processed = cv2.dilate(eroded, KERNEL, iterations=1)
+
+	return pre_processed
 
 if __name__ == '__main__':
-	print(os.getcwd())
-	img = cv2.imread('/src/visual_servoing/visual_servoing/visual_servoing/computer_vision/test_images_cone/test1.jpg')
-	image_print(img)
+	img = cv2.imread('test_images_cone/test1.jpg')
+	image_print(cd_color_segmentation(img))
