@@ -12,8 +12,13 @@ import numpy as np
 #  v
 #  v
 ###############################################################
+EROSION_FACTOR = 15
+DILATION_FACTOR = 5
+EROSION_KERNEL = np.ones((EROSION_FACTOR, EROSION_FACTOR), np.uint8)
+DILATION_KERNEL = np.ones((DILATION_FACTOR, DILATION_FACTOR), np.uint8)
 
-KERNEL = np.ones((5, 5), np.uint8)
+CONE_HSV = np.array([22, 100, 97])
+dHSV = np.array([10, 10, 10])
 
 def image_print(img):
 	"""
@@ -35,10 +40,12 @@ def cd_color_segmentation(img, template=None):
 				(x1, y1) is the top left of the bbox and (x2, y2) is the bottom right of the bbox
 	"""
 	img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-	eroded = cv2.erode(img, KERNEL, iterations=1)
-	pre_processed = cv2.dilate(eroded, KERNEL, iterations=1)
+	eroded = cv2.erode(img, EROSION_KERNEL, iterations=1)
+	pre_processed = cv2.dilate(eroded, DILATION_KERNEL, iterations=1)
 
-	return pre_processed
+	mask = cv2.inRange(pre_processed, CONE_HSV - dHSV, CONE_HSV + dHSV)
+
+	return mask
 
 if __name__ == '__main__':
 	img = cv2.imread('test_images_cone/test1.jpg')
