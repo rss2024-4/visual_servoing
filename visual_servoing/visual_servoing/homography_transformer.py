@@ -21,10 +21,10 @@ from vs_msgs.msg import ConeLocation, ConeLocationPixel
 
 ######################################################
 ## DUMMY POINTS -- ENTER YOUR MEASUREMENTS HERE
-PTS_IMAGE_PLANE = [[-1, -1],
-                   [-1, -1],
-                   [-1, -1],
-                   [-1, -1]] # dummy points
+PTS_IMAGE_PLANE = [[235.0, 199.],
+                   [345., 248.],
+                   [109., 353.],
+                   [745., 213.]] # dummy points
 ######################################################
 
 # PTS_GROUND_PLANE units are in inches
@@ -32,10 +32,10 @@ PTS_IMAGE_PLANE = [[-1, -1],
 
 ######################################################
 ## DUMMY POINTS -- ENTER YOUR MEASUREMENTS HERE
-PTS_GROUND_PLANE = [[-1, -1],
-                    [-1, -1],
-                    [-1, -1],
-                    [-1, -1]] # dummy points
+PTS_GROUND_PLANE = [[1.07, 0.35],
+                    [0.55, 0.04],
+                    [0.6, .43],
+                    [.84, -0.3]] # dummy points
 ######################################################
 
 METERS_PER_INCH = 0.0254
@@ -55,7 +55,8 @@ class HomographyTransformer(Node):
         #Initialize data into a homography matrix
 
         np_pts_ground = np.array(PTS_GROUND_PLANE)
-        np_pts_ground = np_pts_ground * METERS_PER_INCH
+        np_pts_ground = np_pts_ground
+        # * METERS_PER_INCH
         np_pts_ground = np.float32(np_pts_ground[:, np.newaxis, :])
 
         np_pts_image = np.array(PTS_IMAGE_PLANE)
