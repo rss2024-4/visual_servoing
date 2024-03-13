@@ -3,6 +3,7 @@
 import rclpy
 from rclpy.node import Node
 import numpy as np
+from numpy.linalg import norm
 
 from vs_msgs.msg import ConeLocation, ParkingError
 from ackermann_msgs.msg import AckermannDriveStamped
@@ -27,18 +28,32 @@ class ParkingController(Node):
         self.parking_distance = .75 # meters; try playing with this number!
         self.relative_x = 0
         self.relative_y = 0
+        self.fwd = np.array([1,0])
+        self.L = .325
+        self.epsilon = 1e-1
 
         self.get_logger().info("Parking Controller Initialized")
 
     def relative_cone_callback(self, msg):
         self.relative_x = msg.x_pos
         self.relative_y = msg.y_pos
+        # get target point
+        cone = np.array([msg.x_pos, msg.y_pos])
+        norm_cone = norm(cone)
+        s_cone = np.sign(msg.y_pos)*norm(np.cross(self.fwd, cone)) / norm_cone
+        c_cone = np.dot(self.fwd, cone) / norm_cone
+        target = np.array([msg.x_pos - self.parking_distance*s_cone,
+                           msg.y_pos - self.parking_distance*c_cone]).T
+        
+        # steer
+        d = np.linalg.norm(target)
+        sin_eta = np.sign(target[1])*norm(np.cross(self.fwd, target)) / d
+        angle = -np.math.atan2(2*self.L*sin_eta, d)
 
-
-
+        # make signal
         drive_cmd = AckermannDriveStamped()
-        drive_cmd.drive.speed = 1.0
-        drive_cmd.drive.steering_angle = 0.0
+        drive_cmd.drive.steering_angle = angle
+        drive_cmd.drive.speed = 0.0 if d < self.epsilon else 1.0
         self.drive_pub.publish(drive_cmd)
         self.error_publisher()
 
