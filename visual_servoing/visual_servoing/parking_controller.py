@@ -22,8 +22,7 @@ class ParkingController(Node):
         self.drive_pub = self.create_publisher(AckermannDriveStamped, DRIVE_TOPIC, 10)
         self.error_pub = self.create_publisher(ParkingError, "/parking_error", 10)
 
-        self.create_subscription(ConeLocation, "/relative_cone", 
-            self.relative_cone_callback, 1)
+        self.create_subscription(ConeLocation, "/relative_cone", self.relative_cone_callback, 1)
 
         self.parking_distance = .75 # meters; try playing with this number!
         self.relative_x = 0
@@ -34,15 +33,12 @@ class ParkingController(Node):
     def relative_cone_callback(self, msg):
         self.relative_x = msg.x_pos
         self.relative_y = msg.y_pos
+
+
+
         drive_cmd = AckermannDriveStamped()
-
-        #################################
-
-        # YOUR CODE HERE
-        # Use relative position and your control law to set drive_cmd
-
-        #################################
-
+        drive_cmd.drive.speed = 1.0
+        drive_cmd.drive.steering_angle = 0.0
         self.drive_pub.publish(drive_cmd)
         self.error_publisher()
 
@@ -52,14 +48,9 @@ class ParkingController(Node):
         with rqt_plot to plot the success of the controller
         """
         error_msg = ParkingError()
-
-        #################################
-
-        # YOUR CODE HERE
-        # Populate error_msg with relative_x, relative_y, sqrt(x^2+y^2)
-
-        #################################
-        
+        error_msg.x_error = self.relative_x
+        error_msg.y_error = self.relative_y
+        error_msg.distance_error = np.sqrt(self.relative_x**2+ self.relative_x**2)
         self.error_pub.publish(error_msg)
 
 def main(args=None):
