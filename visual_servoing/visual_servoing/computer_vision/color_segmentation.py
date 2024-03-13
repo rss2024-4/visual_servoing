@@ -12,13 +12,13 @@ import numpy as np
 #  v
 #  v
 ###############################################################
-EROSION_FACTOR = 15
+EROSION_FACTOR = 7
 DILATION_FACTOR = 5
 EROSION_KERNEL = np.ones((EROSION_FACTOR, EROSION_FACTOR), np.uint8)
 DILATION_KERNEL = np.ones((DILATION_FACTOR, DILATION_FACTOR), np.uint8)
 
-CONE_HSV = np.array([22, 100, 97])
-dHSV = np.array([10, 10, 10])
+CONE_HSV = np.array([12, 253, 254])
+dHSV = np.array([12, 20, 150])
 
 def image_print(img):
 	"""
@@ -39,14 +39,19 @@ def cd_color_segmentation(img, template=None):
 		bbox: ((x1, y1), (x2, y2)); the bounding box of the cone, unit in px
 				(x1, y1) is the top left of the bbox and (x2, y2) is the bottom right of the bbox
 	"""
-	img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-	eroded = cv2.erode(img, EROSION_KERNEL, iterations=1)
-	pre_processed = cv2.dilate(eroded, DILATION_KERNEL, iterations=1)
-
-	mask = cv2.inRange(pre_processed, CONE_HSV - dHSV, CONE_HSV + dHSV)
-
-	return mask
+	hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+	pre_processed = cv2.dilate(
+						cv2.erode(
+							hsv,
+							EROSION_KERNEL, iterations=1),
+					DILATION_KERNEL, iterations=1)
+	mask = cv2.inRange(pre_processed, CONE_HSV-dHSV, CONE_HSV+dHSV)
+	contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+	x,y,w,h = cv2.boundingRect(contours[-1])
+	cv2.rectangle(img,(x,y),(x+w,y+h),(0,255,0),2)
+	return (x, y), (x+w, y+h)
+	# return img
 
 if __name__ == '__main__':
-	img = cv2.imread('test_images_cone/test1.jpg')
+	img = cv2.imread('test_images_cone/test15.jpg')
 	image_print(cd_color_segmentation(img))
