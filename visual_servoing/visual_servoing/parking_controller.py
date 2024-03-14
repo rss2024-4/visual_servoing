@@ -30,30 +30,33 @@ class ParkingController(Node):
         self.relative_y = 0
         self.fwd = np.array([1,0])
         self.L = .325
-        self.epsilon = 1e-1
+        self.cone_radius = 0.067437 # looked up some random cone online
+        self.speed = 2
 
         self.get_logger().info("Parking Controller Initialized")
 
     def relative_cone_callback(self, msg):
-        self.relative_x = msg.x_pos
-        self.relative_y = msg.y_pos
-        # get target point
-        cone = np.array([msg.x_pos, msg.y_pos])
-        norm_cone = norm(cone)
-        s_cone = np.sign(msg.y_pos)*norm(np.cross(self.fwd, cone)) / norm_cone
-        c_cone = np.dot(self.fwd, cone) / norm_cone
-        target = np.array([msg.x_pos - self.parking_distance*s_cone,
-                           msg.y_pos - self.parking_distance*c_cone]).T
+        # get center of cone
+        cone_edge = np.array([msg.x_pos, msg.y_pos])
+        norm_cone = norm(cone_edge)
+        s_cone = np.sign(msg.y_pos)*norm(np.cross(self.fwd, cone_edge)) / norm_cone
+        c_cone = np.dot(self.fwd, cone_edge) / norm_cone
+        target = np.array([msg.x_pos + self.cone_radius*s_cone,             # this point should be the center of the cone
+                           msg.y_pos + self.cone_radius*c_cone]).T
+        # target = np.array([msg.x_pos, msg.y_pos])
+
+        # set for later
+        self.relative_x, self.relative_y = target[0], target[1]
         
         # steer
         d = np.linalg.norm(target)
         sin_eta = np.sign(target[1])*norm(np.cross(self.fwd, target)) / d
-        angle = -np.math.atan2(2*self.L*sin_eta, d)
+        angle = np.math.atan2(2*self.L*sin_eta, d)
 
         # make signal
         drive_cmd = AckermannDriveStamped()
         drive_cmd.drive.steering_angle = angle
-        drive_cmd.drive.speed = 0.0 if d < self.epsilon else 1.0
+        drive_cmd.drive.speed = self.speed if d > self.parking_distance else 0.0 # if within parking distance of center of cone stop
         self.drive_pub.publish(drive_cmd)
         self.error_publisher()
 
