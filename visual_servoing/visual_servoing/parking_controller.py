@@ -16,7 +16,7 @@ class ParkingController(Node):
     Can be used in the simulator and on the real robot.
     """
     
-    STOP_EPS = 0.1 # in meters
+    STOP_EPS = 0 # prevent stopping
     
     def __init__(self):
         super().__init__("parking_controller")
@@ -29,7 +29,7 @@ class ParkingController(Node):
 
         self.create_subscription(ConeLocation, "/relative_cone", self.relative_cone_callback, 1)
 
-        self.parking_distance = 0 # meters; try playing with this number!
+        self.parking_distance = 0 # Never reach parked distance for line following
         self.relative_x = 0
         self.relative_y = 0
         self.fwd = np.array([1,0])
