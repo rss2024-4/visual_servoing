@@ -54,6 +54,8 @@ class ConeDetector(Node):
             cone_px.u = (p1[0] + p2[0])/2
             cone_px.v = p2[1]*1.0
             self.cone_pub.publish(cone_px)
+        else:
+            print('no cone found')
 
 def main(args=None):
     rclpy.init(args=args)
