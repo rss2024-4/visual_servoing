@@ -46,10 +46,12 @@ def cd_color_segmentation(img, template=None):
 							EROSION_KERNEL, iterations=1),
 					DILATION_KERNEL, iterations=1)
 	mask = cv2.inRange(pre_processed, CONE_HSV-dHSV, CONE_HSV+dHSV)
-	contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-	if contours:
-		x,y,w,h = cv2.boundingRect(contours[-1])
-		return (x, y), (x+w, y+h)
+	# contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+	x, y, w, h = cv2.boundingRect(mask)
+	return (x, y), (x+w, y+h)
+	# if contours:
+	# 	x,y,w,h = cv2.boundingRect(contours[-1])
+	# 	return (x, y), (x+w, y+h)
 	# img = cv2.rectangle(img, (x, y), (x+w, y+h), (0,255,0), 2)
 	# return img
 

@@ -76,7 +76,8 @@ class ParkingController(Node):
         error_msg = ParkingError()
         error_msg.x_error = self.relative_x
         error_msg.y_error = self.relative_y
-        error_msg.distance_error = abs(np.sqrt(self.relative_x**2+ self.relative_x**2) - self.parking_distance)
+        # error_msg.distance_error = abs(np.sqrt(self.relative_x**2+ self.relative_x**2) - self.parking_distance)
+        error_msg.distance_error = abs(np.sqrt(self.relative_x**2+ self.relative_x**2))
         self.error_pub.publish(error_msg)
 
 def main(args=None):
