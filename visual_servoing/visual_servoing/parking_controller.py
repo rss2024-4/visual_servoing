@@ -37,13 +37,13 @@ class ParkingController(Node):
 
     def relative_cone_callback(self, msg):
         # get center of cone
-        cone_edge = np.array([msg.x_pos, msg.y_pos])
-        norm_cone = norm(cone_edge)
-        s_cone = np.sign(msg.y_pos)*norm(np.cross(self.fwd, cone_edge)) / norm_cone
-        c_cone = np.dot(self.fwd, cone_edge) / norm_cone
-        target = np.array([msg.x_pos + self.cone_radius*s_cone,             # this point should be the center of the cone
-                           msg.y_pos + self.cone_radius*c_cone]).T
-        # target = np.array([msg.x_pos, msg.y_pos])
+        # cone_edge = np.array([msg.x_pos, msg.y_pos])
+        # norm_cone = norm(cone_edge)
+        # s_cone = np.sign(msg.y_pos)*norm(np.cross(self.fwd, cone_edge)) / norm_cone
+        # c_cone = np.dot(self.fwd, cone_edge) / norm_cone
+        # target = np.array([msg.x_pos + self.cone_radius*s_cone,             # this point should be the center of the cone
+        #                    msg.y_pos + self.cone_radius*c_cone]).T
+        target = np.array([msg.x_pos, msg.y_pos])
 
         # set for later
         self.relative_x, self.relative_y = target[0], target[1]
