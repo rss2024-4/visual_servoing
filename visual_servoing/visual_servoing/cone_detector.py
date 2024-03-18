@@ -59,7 +59,7 @@ class ConeDetector(Node):
 
         cone_px = ConeLocationPixel()
         cone_px.u = (p1[0] + p2[0])/2
-        cone_px.v = (p1[1] + p2[1])/2 #follow centroid — most likely to be on line
+        cone_px.v = (p1[1] + p2[1])/2 #follow centroid — most likely to be on line (assume cone on ground there)
         self.cone_pub.publish(cone_px)
 
 def main(args=None):
