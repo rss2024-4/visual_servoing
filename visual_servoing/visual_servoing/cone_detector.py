@@ -41,16 +41,19 @@ class ConeDetector(Node):
         # publish this pixel (u, v) to the /relative_cone_px topic; the homography transformer will
         # convert it to the car frame.
         img = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
-        p1, p2 = cd_color_segmentation(img)
-        cv2.rectangle(img, p1, p2, (0,255,0), 2)
 
-        debug_msg = self.bridge.cv2_to_imgmsg(img, "bgr8")
-        self.debug_pub.publish(debug_msg)
+        cone_box = cd_color_segmentation(img)
+        if cone_box:
+            p1, p2 = cone_box
+            cv2.rectangle(img, p1, p2, (0,255,0), 2)
 
-        cone_px = ConeLocationPixel()
-        cone_px.u = (p1[0] + p2[0])/2
-        cone_px.v = p2[1]
-        self.cone_pub.publish(cone_px)
+            debug_msg = self.bridge.cv2_to_imgmsg(img, "bgr8")
+            self.debug_pub.publish(debug_msg)
+
+            cone_px = ConeLocationPixel()
+            cone_px.u = (p1[0] + p2[0])/2
+            cone_px.v = p2[1]*1.0
+            self.cone_pub.publish(cone_px)
 
 def main(args=None):
     rclpy.init(args=args)
