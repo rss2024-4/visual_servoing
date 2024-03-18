@@ -49,7 +49,7 @@ class ConeDetector(Node):
 
         cone_px = ConeLocationPixel()
         cone_px.u = (p1[0] + p2[0])/2
-        cone_px.v = (p1[1] + p2[1])/2
+        cone_px.v = p2[1]
         self.cone_pub.publish(cone_px)
 
 def main(args=None):
