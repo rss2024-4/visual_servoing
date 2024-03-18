@@ -68,7 +68,28 @@ def cd_sift_ransac(img, template):
 
 		########## YOUR CODE STARTS HERE ##########
 
-		x_min = y_min = x_max = y_max = 0
+		# using mask from ransac data to do lmed
+		M, mask = cv2.findHomography(src_pts, dst_pts, cv2.LMEDS, 5.0, mask)
+		matchesMask = mask.ravel().tolist()
+
+		dst = cv2.perspectiveTransform(pts, M)
+
+		# prints visual
+		draw_params = dict(matchColor = (0,255,0), # draw matches in green color
+					 	   singlePointColor = None,
+						   matchesMask = matchesMask, # draw only inliers
+						   flags = 2)
+		img3 = cv2.drawMatches(template,kp1,img,kp2,good,None,**draw_params)
+		# image_print(img3)
+
+		x_min = y_min = float("inf")
+		x_max = y_max = 0
+
+		for [[x,y]] in np.int32(dst):
+			if x < x_min: x_min = x
+			if x > x_max: x_max = x
+			if y < y_min: y_min = y
+			if y > y_max: y_max = y
 
 		########### YOUR CODE ENDS HERE ###########
 
@@ -80,6 +101,7 @@ def cd_sift_ransac(img, template):
 
 		# Return bounding box of area 0 if no match found
 		return ((0,0), (0,0))
+		return cd_template_matching(img, template)
 
 def cd_template_matching(img, template):
 	"""
@@ -100,7 +122,12 @@ def cd_template_matching(img, template):
 	(img_height, img_width) = img_canny.shape[:2]
 
 	# Keep track of best-fit match
-	best_match = None
+	best_match = 0
+	bounding_box = ((),())
+
+	# sharpen_filter = np.array([[-1,-1,-1],[-1,9,-1],[-1,-1,-1]])
+	# img_canny = cv2.filter2D(img_canny, -1, sharpen_filter)
+	# img_canny = cv2.GaussianBlur(img_canny, (5,5),0)
 
 	# Loop over different scales of image
 	for scale in np.linspace(1.5, .5, 50):
@@ -115,9 +142,28 @@ def cd_template_matching(img, template):
 		# Use OpenCV template matching functions to find the best match
 		# across template scales.
 
+		# resized_template = cv2.filter2D(resized_template, -1, sharpen_filter)
+		
+		# mask = np.zeros((h,w), dtype="uint8")
+		resized_template = cv2.GaussianBlur(resized_template, (3,5),0)
+		res = cv2.matchTemplate(img_canny, resized_template, cv2.TM_CCORR_NORMED)
+		min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+
 		# Remember to resize the bounding box using the highest scoring scale
 		# x1,y1 pixel will be accurate, but x2,y2 needs to be correctly scaled
-		bounding_box = ((0,0),(0,0))
+		# if min_val < best_match:
+			# best_match = min_val
+			# bounding_box = ((min_loc[0], min_loc[1]), (min_loc[0]+w, min_loc[1]+h))
+		if max_val > best_match:
+			best_match = max_val
+
+			bounding_box = ((max_loc[0], max_loc[1]), (max_loc[0]+w, max_loc[1]+h))
+			
 		########### YOUR CODE ENDS HERE ###########
 
+	# print(bounding_box)
+	print(best_match)
+	# output = cv2.rectangle(img, bounding_box[0], bounding_box[1], (255,0,0), 3)
+	# image_print(img)
+	# image_print(test)
 	return bounding_box
