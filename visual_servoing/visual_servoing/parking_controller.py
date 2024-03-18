@@ -4,6 +4,7 @@ import rclpy
 from rclpy.node import Node
 import numpy as np
 from numpy.linalg import norm
+from math import copysign
 
 from vs_msgs.msg import ConeLocation, ParkingError
 from ackermann_msgs.msg import AckermannDriveStamped
@@ -14,6 +15,9 @@ class ParkingController(Node):
     Listens for a relative cone location and publishes control commands.
     Can be used in the simulator and on the real robot.
     """
+    
+    STOP_EPS = 0.1 # in meters
+    
     def __init__(self):
         super().__init__("parking_controller")
 
@@ -56,7 +60,10 @@ class ParkingController(Node):
         # make signal
         drive_cmd = AckermannDriveStamped()
         drive_cmd.drive.steering_angle = angle
-        drive_cmd.drive.speed = self.speed if d > self.parking_distance else 0.0 # if within parking distance of center of cone stop
+        
+        drive_cmd.drive.speed = copysign(1.0, d - self.parking_distance) * self.speed \
+                        if abs(d - self.parking_distance) > self.STOP_EPS else 0.0 
+                        # if within parking distance of center of cone stop, otherwise go to that point
         self.drive_pub.publish(drive_cmd)
         self.error_publisher()
 
@@ -68,7 +75,7 @@ class ParkingController(Node):
         error_msg = ParkingError()
         error_msg.x_error = self.relative_x
         error_msg.y_error = self.relative_y
-        error_msg.distance_error = np.sqrt(self.relative_x**2+ self.relative_x**2)
+        error_msg.distance_error = abs(np.sqrt(self.relative_x**2+ self.relative_x**2) - self.parking_distance)
         self.error_pub.publish(error_msg)
 
 def main(args=None):
