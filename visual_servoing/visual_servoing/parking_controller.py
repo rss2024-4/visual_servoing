@@ -29,7 +29,7 @@ class ParkingController(Node):
 
         self.create_subscription(ConeLocation, "/relative_cone", self.relative_cone_callback, 1)
 
-        self.parking_distance = .75 # meters; try playing with this number!
+        self.parking_distance = 0 # meters; try playing with this number!
         self.relative_x = 0
         self.relative_y = 0
         self.fwd = np.array([1,0])
