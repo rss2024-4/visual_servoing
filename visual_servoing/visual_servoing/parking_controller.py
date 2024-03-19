@@ -29,7 +29,7 @@ class ParkingController(Node):
 
         self.create_subscription(ConeLocation, "/relative_cone", self.relative_cone_callback, 1)
 
-        self.parking_distance = .75 # meters; try playing with this number!
+        self.parking_distance = .2 # meters; try playing with this number!
         self.relative_x = 0
         self.relative_y = 0
         self.fwd = np.array([1,0])
@@ -60,9 +60,6 @@ class ParkingController(Node):
         # make signal
         drive_cmd = AckermannDriveStamped()
         drive_cmd.drive.steering_angle = angle
-        
-        # drive_cmd.drive.speed = copysign(1.0, d - self.parking_distance) * self.speed \
-        #                 if abs(d - self.parking_distance) > self.STOP_EPS else 0.0 
         drive_cmd.drive_speed = self.speed if d > self.parking_distance else 0.0
                         # if within parking distance of center of cone stop, otherwise go to that point
         self.drive_pub.publish(drive_cmd)
