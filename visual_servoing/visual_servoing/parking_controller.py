@@ -35,7 +35,7 @@ class ParkingController(Node):
         self.fwd = np.array([1,0])
         self.L = .325
         self.cone_radius = 0.067437 # looked up some random cone online
-        self.speed = 2
+        self.speed = 0.7
 
         self.get_logger().info("Parking Controller Initialized")
 
@@ -61,8 +61,7 @@ class ParkingController(Node):
         drive_cmd = AckermannDriveStamped()
         drive_cmd.drive.steering_angle = angle
         
-        drive_cmd.drive.speed = copysign(1.0, d - self.parking_distance) * self.speed \
-                        if abs(d - self.parking_distance) > self.STOP_EPS else 0.0 
+        drive_cmd.drive.speed = self.speed if d > self.parking_distance else 0.0
                         # if within parking distance of center of cone stop, otherwise go to that point
         self.drive_pub.publish(drive_cmd)
         self.error_publisher()
