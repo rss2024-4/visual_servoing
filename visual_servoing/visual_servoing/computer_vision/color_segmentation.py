@@ -18,6 +18,7 @@ EROSION_KERNEL = np.ones((EROSION_FACTOR, EROSION_FACTOR), np.uint8)
 DILATION_KERNEL = np.ones((DILATION_FACTOR, DILATION_FACTOR), np.uint8)
 
 CONE_HSV = np.array([12, 253, 254])
+LINE_HSV = np.array([20, 20, 50])
 dHSV = np.array([12, 20, 150])
 
 def image_print(img):
@@ -29,7 +30,7 @@ def image_print(img):
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
 
-def cd_color_segmentation(img, template=None):
+def cd_color_segmentation(img, low_bound = CONE_HSV-LINE_HSV, high_bound=CONE_HSV + LINE_HSV,template=None):
 	"""
 	Implement the cone detection using color segmentation algorithm
 	Input:
@@ -45,9 +46,9 @@ def cd_color_segmentation(img, template=None):
 							hsv,
 							EROSION_KERNEL, iterations=1),
 					DILATION_KERNEL, iterations=1)
-	mask = cv2.inRange(pre_processed, CONE_HSV-dHSV, CONE_HSV+dHSV)
-	contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-	x,y,w,h = cv2.boundingRect(contours[-1])
+	mask = cv2.inRange(pre_processed, low_bound, high_bound)
+	#contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+	x,y,w,h = cv2.boundingRect(mask)
 	return (x, y), (x+w, y+h)
 	# img = cv2.rectangle(img, (x, y), (x+w, y+h), (0,255,0), 2)
 	# return img

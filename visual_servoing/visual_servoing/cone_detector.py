@@ -45,14 +45,16 @@ class ConeDetector(Node):
         # convert it to the car frame.
         
         img = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
-        dims = img.shape
-        mask = np.zeros(dims[:2], dtype='uint8')
-        cv2.rectangle(mask, (dims[0] * (1 - self.LOWER_PERCENT), 0), (dims[0] * (1 - self.UPPER_PERCENT), dims[1]), 255, -1)
-        # debug_msg = self.bridge.cv2_to_imgmsg(mask, "bgr8")
-        # self.debug_pub.publish(debug_msg)
-        img_masked = cv2.bitwise_and(img, img, mask=mask)
-        p1, p2 = cd_color_segmentation(img_masked)
-        cv2.rectangle(img, p1, p2, (0,255,0), 2)
+        y, x, rgb = img.shape
+        
+        img[0:y//2,:,:] = 0
+        img[4*y//5:y,:,:] = 0
+        low_bound = np.array([0, 100, 100])
+        high_bound = np.array([10, 255, 255]) 
+        cone_box = cd_color_segmentation(img, low_bound=low_bound, high_bound=high_bound)
+        if cone_box:
+            p1, p2 = cone_box
+            cv2.rectangle(img, p1, p2, (0,255,0), 2)
 
         debug_msg = self.bridge.cv2_to_imgmsg(img, "bgr8")
         self.debug_pub.publish(debug_msg)

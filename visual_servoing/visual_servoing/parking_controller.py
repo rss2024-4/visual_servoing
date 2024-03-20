@@ -35,7 +35,7 @@ class ParkingController(Node):
         self.fwd = np.array([1,0])
         self.L = .325
         self.cone_radius = 0.067437 # looked up some random cone online
-        self.speed = 0.7
+        self.speed = 1.0
 
         self.get_logger().info("Parking Controller Initialized")
 
