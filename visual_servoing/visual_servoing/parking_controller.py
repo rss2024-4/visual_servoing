@@ -25,32 +25,14 @@ class ParkingController(Node):
         DRIVE_TOPIC = self.get_parameter("drive_topic").value # set in launch file; different for simulator vs racecar
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, DRIVE_TOPIC, 10)
-        self.error_pub = self.create_publisher(ParkingError, "/parking_error", 10)
-
-        self.create_subscription(ConeLocation, "/relative_cone", self.relative_cone_callback, 1)
-
-        self.parking_distance = 0 # Never reach parked distance for line following
-        self.relative_x = 0
-        self.relative_y = 0
+        self.create_subscription(ConeLocation, "/point_to_follow", self.relative_cone_callback, 1)
         self.fwd = np.array([1,0])
         self.L = .325
-        self.cone_radius = 0.067437 # looked up some random cone online
-        self.speed = 1.0
-
-        self.get_logger().info("Parking Controller Initialized")
+        self.speed = 4.0
+        self.get_logger().info("Point Follower Initialized")
 
     def relative_cone_callback(self, msg):
-        # get center of cone
-        # cone_edge = np.array([msg.x_pos, msg.y_pos])
-        # norm_cone = norm(cone_edge)
-        # s_cone = np.sign(msg.y_pos)*norm(np.cross(self.fwd, cone_edge)) / norm_cone
-        # c_cone = np.dot(self.fwd, cone_edge) / norm_cone
-        # target = np.array([msg.x_pos + self.cone_radius*s_cone,             # this point should be the center of the cone
-        #                    msg.y_pos + self.cone_radius*c_cone]).T
         target = np.array([msg.x_pos, msg.y_pos])
-
-        # set for later
-        self.relative_x, self.relative_y = target[0], target[1]
         
         # steer
         d = np.linalg.norm(target)
@@ -60,22 +42,8 @@ class ParkingController(Node):
         # make signal
         drive_cmd = AckermannDriveStamped()
         drive_cmd.drive.steering_angle = angle
-        
-        drive_cmd.drive.speed = self.speed if d > self.parking_distance else 0.0
-                        # if within parking distance of center of cone stop, otherwise go to that point
+        drive_cmd.drive.speed = self.speed
         self.drive_pub.publish(drive_cmd)
-        self.error_publisher()
-
-    def error_publisher(self):
-        """
-        Publish the error between the car and the cone. We will view this
-        with rqt_plot to plot the success of the controller
-        """
-        error_msg = ParkingError()
-        error_msg.x_error = self.relative_x
-        error_msg.y_error = self.relative_y
-        error_msg.distance_error = abs(np.sqrt(self.relative_x**2+ self.relative_x**2) - self.parking_distance)
-        self.error_pub.publish(error_msg)
 
 def main(args=None):
     rclpy.init(args=args)

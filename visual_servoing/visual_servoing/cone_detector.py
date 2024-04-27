@@ -27,42 +27,43 @@ class ConeDetector(Node):
         self.LineFollower = False
 
         # Subscribe to ZED camera RGB frames
-        self.cone_pub = self.create_publisher(ConeLocationPixel, "/relative_cone_px", 10)
-        self.debug_pub = self.create_publisher(Image, "/cone_debug_img", 10)
+        self.cone_pub = self.create_publisher(ConeLocationPixel, "/point_px", 10)
+        self.debug_pub = self.create_publisher(Image, "/debug_img", 10)
         self.image_sub = self.create_subscription(Image, "/zed/zed_node/rgb/image_rect_color", self.image_callback, 5)
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
-        
-        self.LOWER_PERCENT = 0.2
-        self.UPPER_PERCENT = 0.3
 
         self.get_logger().info("Cone Detector Initialized")
 
-    def image_callback(self, image_msg):
-        # Apply your imported color segmentation function (cd_color_segmentation) to the image msg here
-        # From your bounding box, take the center pixel on the bottom
-        # (We know this pixel corresponds to a point on the ground plane)
-        # publish this pixel (u, v) to the /relative_cone_px topic; the homography transformer will
-        # convert it to the car frame.
-        
+    def image_callback(self, image_msg):        
         img = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
-        y, x, rgb = img.shape
-        
-        img[0:y//2,:,:] = 0
-        img[4*y//5:y,:,:] = 0
-        low_bound = np.array([0, 100, 100])
-        high_bound = np.array([10, 255, 255]) 
-        cone_box = cd_color_segmentation(img, low_bound=low_bound, high_bound=high_bound)
-        if cone_box:
-            p1, p2 = cone_box
-            cv2.rectangle(img, p1, p2, (0,255,0), 2)
+        # In case we want only a portion of the image
+        # y, _, _ = img.shape
+        # img[0:y//2,:,:] = 0
+        # img[4*y//5:y,:,:] = 0
+        u, v = self.get_point(img)
 
+        cv2.circle(img, (u,v), 2, (0,0,255), 2) # Circle for debug
         debug_msg = self.bridge.cv2_to_imgmsg(img, "bgr8")
         self.debug_pub.publish(debug_msg)
 
-        cone_px = ConeLocationPixel()
-        cone_px.u = (p1[0] + p2[0])/2
-        cone_px.v = (p1[1] + p2[1])/2 #follow centroid — most likely to be on line (assume cone on ground there)
-        self.cone_pub.publish(cone_px)
+        px = ConeLocationPixel()
+        px.u = u
+        px.v = v
+        self.cone_pub.publish(px)
+
+    def get_point(self, img):
+        edges = cv2.Canny(img, 50, 500, 3)
+        lines = cv2.HoughLines(edges, 1, np.pi/180, 150, None, 0, 0)
+        new = np.zeros(img.shape)
+        for r_theta in lines:
+            arr = np.array(r_theta[0], dtype=np.float64)
+            r, theta = arr
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a*r
+            y0 = b*r
+            cv2.line(new, (int(x0 + 1000*(-b)), int(y0 + 1000*(a))), (int(x0 - 1000*(-b)), int(y0 - 1000*(a))), (0, 0, 255), 2)
+        return (0,0)
 
 def main(args=None):
     rclpy.init(args=args)
