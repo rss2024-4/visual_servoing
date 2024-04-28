@@ -32,6 +32,10 @@ class ConeDetector(Node):
         self.image_sub = self.create_subscription(Image, "/zed/zed_node/rgb/image_rect_color", self.image_callback, 5)
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
 
+        self.sensitivity = 35
+        self.lower_white = np.array([0,0,255-self.sensitivity])
+        self.upper_white = np.array([255,self.sensitivity,255])
+
         self.get_logger().info("Cone Detector Initialized")
 
     def image_callback(self, image_msg):        
@@ -52,9 +56,13 @@ class ConeDetector(Node):
         self.cone_pub.publish(px)
 
     def get_point(self, img):
-        edges = cv2.Canny(img, 50, 500, 3)
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, self.lower_white, self.upper_white)
+        
+        edges = cv2.Canny(mask, 50, 500, 3)
         lines = cv2.HoughLines(edges, 1, np.pi/180, 150, None, 0, 0)
-        new = np.zeros(img.shape)
+
+        black = np.zeros(img.shape)
         for r_theta in lines:
             arr = np.array(r_theta[0], dtype=np.float64)
             r, theta = arr
@@ -62,7 +70,8 @@ class ConeDetector(Node):
             b = np.sin(theta)
             x0 = a*r
             y0 = b*r
-            cv2.line(new, (int(x0 + 1000*(-b)), int(y0 + 1000*(a))), (int(x0 - 1000*(-b)), int(y0 - 1000*(a))), (0, 0, 255), 2)
+            cv2.line(black, (int(x0 + 1000*(-b)), int(y0 + 1000*(a))), (int(x0 - 1000*(-b)), int(y0 - 1000*(a))), (0, 0, 255), 2)
+        
         return (0,0)
 
 def main(args=None):
