@@ -12,6 +12,7 @@ from sensor_msgs.msg import Image
 from ackermann_msgs.msg import AckermannDriveStamped
 from visualization_msgs.msg import Marker
 from vs_msgs.msg import ConeLocation, ConeLocationPixel
+from geometry_msgs.msgs import Point
 
 #The following collection of pixel locations and corresponding relative
 #ground plane locations are used to compute our homography matrix
@@ -21,10 +22,34 @@ from vs_msgs.msg import ConeLocation, ConeLocationPixel
 
 ######################################################
 ## DUMMY POINTS -- ENTER YOUR MEASUREMENTS HERE
-PTS_IMAGE_PLANE = [[235.0, 199.],
-                   [345., 248.],
-                   [109., 353.],
-                   [745., 213.]] # dummy points
+PTS_IMAGE_PLANE = [[334., 315.],
+                   [336., 272.],
+                   [334., 246.],
+                   [332., 228.],
+                   [334., 206.],
+                   [334., 185.],
+                   [334., 176.],
+                   [332., 168.],
+                   [442., 317.],
+                   [562., 318.],
+                   [321., 315.],
+                   [108., 315.],
+                   [500., 273.],
+                   [244., 271.],
+                   [157., 272.],
+                   [67., 274.],
+                   [444., 229.],
+                   [560., 230.],
+                   [271., 228.],
+                   [214., 230.],
+                   [96., 230.],
+                   [433., 193.],
+                   [539., 195.],
+                   [225., 193.],
+                   [119., 194.],
+                   [431., 179.],
+                   [231., 178.],
+                   [135., 178.]] # dummy points
 ######################################################
 
 # PTS_GROUND_PLANE units are in inches
@@ -32,10 +57,35 @@ PTS_IMAGE_PLANE = [[235.0, 199.],
 
 ######################################################
 ## DUMMY POINTS -- ENTER YOUR MEASUREMENTS HERE
-PTS_GROUND_PLANE = [[1.07, 0.35],
-                    [0.55, 0.04],
-                    [0.6, .43],
-                    [.84, -0.3]] # dummy points
+PTS_GROUND_PLANE = [[15, 0],
+                    [20, 0],
+                    [25, 0],
+                    [30, 0],
+                    [40, 0]
+                    [60, 0],
+                    [80, 0],
+                    [100, 0],
+                    [15, -5],
+                    [15, -10],
+                    [15, 5],
+                    [15, 10],
+                    [20, -10],
+                    [20, 5],
+                    [20, 10],
+                    [20, 15],
+                    [30, -10],
+                    [30, -20],
+                    [30, 5],
+                    [30, 10],
+                    [30, 20],
+                    [50, -15],
+                    [50, -30],
+                    [50, 15],
+                    [50, 30],
+                    [70, -20],
+                    [70, 20],
+                    [70, 39],
+                    ] # dummy points
 ######################################################
 
 METERS_PER_INCH = 0.0254
@@ -48,6 +98,7 @@ class HomographyTransformer(Node):
         self.cone_pub = self.create_publisher(ConeLocation, "/point_to_follow", 10)
         self.marker_pub = self.create_publisher(Marker, "/follow_point_marker", 1)
         self.cone_px_sub = self.create_subscription(ConeLocationPixel, "/point_px", self.cone_detection_callback, 1)
+        self.mouse_sub = self.create_subscription(Point, "/mouse_left", self.mouse_callback, 1)
 
         if not len(PTS_GROUND_PLANE) == len(PTS_IMAGE_PLANE):
             rclpy.logerr("ERROR: PTS_GROUND_PLANE and PTS_IMAGE_PLANE should be of same length")
@@ -66,6 +117,11 @@ class HomographyTransformer(Node):
         self.h, err = cv2.findHomography(np_pts_image, np_pts_ground)
 
         self.get_logger().info("Homography Transformer Initialized")
+
+    def mouse_sub(self, msg):
+        self.get_logger.info(f'received mouse click at {msg.x}, {msg.y} ')
+        new_coords = self.transformUvToXy(msg.x,msg.y)
+        self.get_logger.info(f'new coords: {new_coords}')
 
     def cone_detection_callback(self, msg):
         #Extract information from message
