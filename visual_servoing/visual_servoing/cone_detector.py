@@ -33,6 +33,7 @@ class ConeDetector(Node):
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
 
         # TODO tune lookahead
+        self.slope = 1.5
         self.look_ahead = 1000 # Measured in pixels
         self.epsilon = 1e-5
         self.sensitivity = 35
@@ -47,7 +48,7 @@ class ConeDetector(Node):
         # TODO find a good crop
         img[0:y//2] = 0
         img[4*y//5:y] = 0
-        debug_img, u, v = self.get_point(img, self.lower_white, self.upper_white, self.epsilon)
+        debug_img, u, v = self.get_point(img, self.lower_white, self.upper_white, self.epsilon, self.slope)
         v = self.look_ahead
 
         cv2.circle(debug_img, (u,v), 2, (0,0,255), 2)
@@ -60,7 +61,7 @@ class ConeDetector(Node):
         self.cone_pub.publish(px)
 
     @staticmethod
-    def get_point(img, lower_white, upper_white, epsilon):
+    def get_point(img, lower_white, upper_white, epsilon, slope):
         # Pre-processing
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, lower_white, upper_white)
@@ -72,19 +73,22 @@ class ConeDetector(Node):
         r, theta = lines[:,0,0], lines[:,0,1]
         c, s = np.cos(theta), np.sin(theta) + epsilon # Add to not divide by 0
         m, b = -c/s, r/s
-        m_positive, b_positive = m[m > 1], b[m > 1] # Select for vertical lines
+        m_positive, b_positive = m[m > slope], b[m > slope] # Select for vertical lines
         N_positive = m_positive.shape[0]
-        m_negative, b_negative = m[m < -1], b[m < -1] # Select for vertical lines
+        m_negative, b_negative = m[m < -slope], b[m < -slope] # Select for vertical lines
         N_negative = m_negative.shape[0]
 
-        x_intersections = []
-        y_intersections = []
+        # x_intersections = []
+        # y_intersections = []
+        s_x, s_y, N = 0, 0, 0
         for i in range(N_positive):
             for j in range(N_negative):
                 x = (b_positive[i] - b_negative[j]) / (m_negative[j] - m_positive[i])
-                y = m_positive[i]*x + b_positive[i]
-                x_intersections.append(x)
-                y_intersections.append(y)
+                s_x += x
+                s_y += m_positive[i]*x + b_positive[i]
+                N += 1
+                # x_intersections.append(x)
+                # y_intersections.append(y)
 
         # Draw positive
         for m_,b_ in zip(m_positive, b_positive):
@@ -101,7 +105,51 @@ class ConeDetector(Node):
             yf = int(m_*xf + b_)
             cv2.line(debug_rgb, (x0,y0), (xf,yf), (0, 0, 255), 2)
         
-        return debug_rgb, np.mean(x_intersections), np.mean(y_intersections)
+        return debug_rgb, s_x/N, s_y/N
+
+    @staticmethod
+    def get_point_other(img, lower_white, upper_white, epsilon, slope, lookahead):
+        # Pre-processing
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, lower_white, upper_white)
+        edges = cv2.Canny(mask, 500, 1200)
+        debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+
+        # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
+        lines = cv2.HoughLines(edges, 1, np.pi/180, 130)
+        r, theta = lines[:,0,0], lines[:,0,1]
+        c, s = np.cos(theta), np.sin(theta) + epsilon # Add to not divide by 0
+        m, b = -c/s, r/s
+        m_positive, b_positive = m[m > slope], b[m > slope] # Select for vertical lines
+        N_positive = m_positive.shape[0]
+        m_negative, b_negative = m[m < -slope], b[m < -slope] # Select for vertical lines
+        N_negative = m_negative.shape[0]
+
+        x_intersections = []
+        y_intersections = []
+        lines = []
+        for i in range(N_positive):
+            for j in range(N_negative):
+                x = (b_positive[i] - b_negative[j]) / (m_negative[j] - m_positive[i])
+                y = m_positive[i]*x + b_positive[i]
+                x_intersections.append(x)
+                y_intersections.append(y)
+                lines.append((m_positive[i], b_positive[i], m_negative[j], b_negative[j]))
+        mp, bp, mn, bn = lines[np.argmin(y_intersections)]
+        
+        # Draw lines
+        x0 = -1000
+        y0 = int(mp*x0 + bp)
+        xf = 1000
+        yf = int(mp*xf + bp)
+        cv2.line(debug_rgb, (x0,y0), (xf,yf), (0, 0, 255), 2)
+        y0 = int(mn*x0 + bn)
+        yf = int(mn*xf + bn)
+        cv2.line(debug_rgb, (x0,y0), (xf,yf), (0, 0, 255), 2)
+
+        x = (lookahead - bp) / mp
+        offset = 20
+        return debug_rgb, x - offset, lookahead
 
 def main(args=None):
     rclpy.init(args=args)
