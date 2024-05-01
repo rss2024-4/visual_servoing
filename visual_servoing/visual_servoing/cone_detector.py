@@ -96,12 +96,13 @@ class ConeDetector(Node):
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
 
         # TODO tune lookahead
-        self.H, _= cv2.findHomography(PTS_IMAGE_PLANE, PTS_GROUND_PLANE)
-        self.slope = 1.5
+        H, _= cv2.findHomography(PTS_IMAGE_PLANE, PTS_GROUND_PLANE)
+        self.H_inv = np.linalg.inv(H)
+        self.slope = 0.3
         self.epsilon = 1e-5
         self.dist_from_line = 1.22/2 # Meters
         self.lookahead = 4.0 # Meters
-        sensitivity = 35
+        sensitivity = 55
         self.lower_white = np.array([0, 0, 255-sensitivity])
         self.upper_white = np.array([255, sensitivity, 255])
 
@@ -111,12 +112,12 @@ class ConeDetector(Node):
         img = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
         y, _, _ = img.shape
         # TODO find a good crop
-        img[0:y//2] = 0
-        img[4*y//5:y] = 0
-        debug_img, m, b = self.get_line(img, self.lower_white, self.upper_white, self.epsilon, self.slope)
+        img[0:5*y//10] = 0
+        # img[4*y//5:y] = 0
+        debug_img, m, b = self.get_line(img)
 
         # Transform line
-        m_W, b_W = self.transform(m, b, self.H)
+        m_W, b_W = self.transform(m, b)
         m_T, b_T = m_W, self.dist_from_line*np.sqrt(1 + (m_W**2)) + b_W
         point = self.intersection(m_T, b_T, self.lookahead)
         if point is not None:
@@ -138,36 +139,39 @@ class ConeDetector(Node):
         p.y_pos = y
         self.cone_pub.publish(p)
     
-    @staticmethod
-    def get_line(img, lower_white, upper_white, epsilon, slope):
+    def get_line(self, img):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, lower_white, upper_white)
+        mask = cv2.inRange(hsv, self.lower_white, self.upper_white)
         edges = cv2.Canny(mask, 500, 1200)
         debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
 
         # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
         lines = cv2.HoughLines(edges, 1, np.pi/180, 130)
         r, theta = lines[:,0,0], lines[:,0,1]
-        c, s = np.cos(theta), np.sin(theta) + epsilon # Add to not divide by 0
+        c, s = np.cos(theta), np.sin(theta) + self.epsilon # Add to not divide by 0
         m, b = -c/s, r/s
-        selection = m > slope
+        selection = m > self.slope
         m_selected, b_selected = m[selection], b[selection] # Select for vertical lines on right
 
         m, b = np.mean(m_selected), np.mean(b_selected)
 
         # Draw line
-        x0, xf = -1000, 1000
-        y0, yf = int(m*x0 + b), int(m*xf + b)
-        cv2.line(debug_rgb, (x0,y0), (xf,yf), (0, 0, 255), 2)
+        self.draw_lines(debug_rgb, [m], [b])
 
         return debug_rgb, m, b
 
-    @staticmethod
-    def transform(m, b, H):
+    def transform(self, m, b):
         l = np.array([[-m, 1, 0]])
-        l_transformed = l @ np.linalg.inv(H)
+        l_transformed = l @ self.H_inv
         c_x, c_y, c_1 = l_transformed[0,0], l_transformed[0,1], l_transformed[0,2]
         return -c_x/c_y, (b-c_1)/c_y
+    
+    @staticmethod
+    def draw_lines(img, m, b):
+        for m, b in zip(m,b):
+            x0, xf = -1000, 1000
+            y0, yf = int(m*x0 + b), int(m*xf + b)
+            cv2.line(img, (x0,y0), (xf,yf), (0, 0, 255), 2)
     
     @staticmethod
     def intersection(m, b, r):
