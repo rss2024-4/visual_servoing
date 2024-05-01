@@ -25,7 +25,7 @@ class ParkingController(Node):
         DRIVE_TOPIC = self.get_parameter("drive_topic").value # set in launch file; different for simulator vs racecar
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, DRIVE_TOPIC, 10)
-        self.create_subscription(ConeLocation, "/point_to_follow", self.relative_cone_callback, 1)
+        self.create_subscription(ConeLocation, "/point", self.relative_cone_callback, 1)
         self.fwd = np.array([1,0])
         self.L = .325
         self.speed = 4.0

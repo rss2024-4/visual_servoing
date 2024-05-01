@@ -6,14 +6,76 @@ import numpy as np
 
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
+from visualization_msgs.msg import Marker
 
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Point #geometry_msgs not in CMake file
-from vs_msgs.msg import ConeLocationPixel
+from vs_msgs.msg import ConeLocation
+
 
 # import your color segmentation algorithm; call this function in ros_image_callback!
 from computer_vision.color_segmentation import cd_color_segmentation
 
+PTS_IMAGE_PLANE = np.array([
+	[334., 315.],
+	[336., 272.],
+	[334., 246.],
+	[332., 228.],
+	[334., 206.],
+	[334., 185.],
+	[334., 176.],
+	[332., 168.],
+	[442., 317.],
+	[562., 318.],
+	[321., 315.],
+	[108., 315.],
+	[500., 273.],
+	[244., 271.],
+	[157., 272.],
+	[67., 274.],
+	[444., 229.],
+	[560., 230.],
+	[271., 228.],
+	[214., 230.],
+	[96., 230.],
+	[433., 193.],
+	[539., 195.],
+	[225., 193.],
+	[119., 194.],
+	[431., 179.],
+	[231., 178.],
+	[135., 178.],
+])
+PTS_GROUND_PLANE = np.array([
+	[15, 0],
+	[20, 0],
+	[25, 0],
+	[30, 0],
+	[40, 0],
+	[60, 0],
+	[80, 0],
+	[100, 0],
+	[15, -5],
+	[15, -10],
+	[15, 5],
+	[15, 10],
+	[20, -10],
+	[20, 5],
+	[20, 10],
+	[20, 15],
+	[30, -10],
+	[30, -20],
+	[30, 5],
+	[30, 10],
+	[30, 20],
+	[50, -15],
+	[50, -30],
+	[50, 15],
+	[50, 30],
+	[70, -20],
+	[70, 20],
+	[70, 39],
+])
 
 class ConeDetector(Node):
     """
@@ -27,18 +89,21 @@ class ConeDetector(Node):
         self.LineFollower = False
 
         # Subscribe to ZED camera RGB frames
-        self.cone_pub = self.create_publisher(ConeLocationPixel, "/point_px", 10)
+        self.cone_pub = self.create_publisher(ConeLocation, "/point", 10)
         self.debug_pub = self.create_publisher(Image, "/debug_img", 10)
         self.image_sub = self.create_subscription(Image, "/zed/zed_node/rgb/image_rect_color", self.image_callback, 5)
+        self.marker_pub = self.create_publisher(Marker, "/point_marker", 1)
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
 
         # TODO tune lookahead
+        self.H, _= cv2.findHomography(PTS_IMAGE_PLANE, PTS_GROUND_PLANE)
         self.slope = 1.5
-        self.look_ahead = 1000 # Measured in pixels
         self.epsilon = 1e-5
-        self.sensitivity = 35
-        self.lower_white = np.array([0,0,255-self.sensitivity])
-        self.upper_white = np.array([255,self.sensitivity,255])
+        self.dist_from_line = 1.22/2 # Meters
+        self.lookahead = 4.0 # Meters
+        sensitivity = 35
+        self.lower_white = np.array([0, 0, 255-sensitivity])
+        self.upper_white = np.array([255, sensitivity, 255])
 
         self.get_logger().info("Cone Detector Initialized")
 
@@ -48,21 +113,33 @@ class ConeDetector(Node):
         # TODO find a good crop
         img[0:y//2] = 0
         img[4*y//5:y] = 0
-        debug_img, u, v = self.get_point(img, self.lower_white, self.upper_white, self.epsilon, self.slope)
-        v = self.look_ahead
+        debug_img, m, b = self.get_line(img, self.lower_white, self.upper_white, self.epsilon, self.slope)
 
-        cv2.circle(debug_img, (u,v), 2, (0,0,255), 2)
+        # Transform line
+        m_W, b_W = self.transform(m, b, self.H)
+        m_T, b_T = m_W, self.dist_from_line*np.sqrt(1 + (m_W**2)) + b_W
+        point = self.intersection(m_T, b_T, self.lookahead)
+        if point is not None:
+            x, y = point
+        else:
+            x, y = 0, 0
+
+        # Debug
+        self.draw_marker(x, y)
+        self.get_logger().info(f"Equation of line in image is: y = {m}*x + {b}")
+        self.get_logger().info(f"Equation of line from homography is: y = {m_W}*x + {b_W}")
+        self.get_logger().info(f"Line to follow is: y = {m_T}*x + {b_T}")
+        self.get_logger().info(f"Point to follow is: ({x}, {y})")
         debug_msg = self.bridge.cv2_to_imgmsg(debug_img, "bgr8")
         self.debug_pub.publish(debug_msg)
 
-        px = ConeLocationPixel()
-        px.u = u
-        px.v = v
-        self.cone_pub.publish(px)
-
+        p = ConeLocation()
+        p.x_pos = x
+        p.y_pos = y
+        self.cone_pub.publish(p)
+    
     @staticmethod
-    def get_point(img, lower_white, upper_white, epsilon, slope):
-        # Pre-processing
+    def get_line(img, lower_white, upper_white, epsilon, slope):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, lower_white, upper_white)
         edges = cv2.Canny(mask, 500, 1200)
@@ -73,83 +150,56 @@ class ConeDetector(Node):
         r, theta = lines[:,0,0], lines[:,0,1]
         c, s = np.cos(theta), np.sin(theta) + epsilon # Add to not divide by 0
         m, b = -c/s, r/s
-        m_positive, b_positive = m[m > slope], b[m > slope] # Select for vertical lines
-        N_positive = m_positive.shape[0]
-        m_negative, b_negative = m[m < -slope], b[m < -slope] # Select for vertical lines
-        N_negative = m_negative.shape[0]
+        selection = m > slope
+        m_selected, b_selected = m[selection], b[selection] # Select for vertical lines on right
 
-        # x_intersections = []
-        # y_intersections = []
-        s_x, s_y, N = 0, 0, 0
-        for i in range(N_positive):
-            for j in range(N_negative):
-                x = (b_positive[i] - b_negative[j]) / (m_negative[j] - m_positive[i])
-                s_x += x
-                s_y += m_positive[i]*x + b_positive[i]
-                N += 1
-                # x_intersections.append(x)
-                # y_intersections.append(y)
+        m, b = np.mean(m_selected), np.mean(b_selected)
 
-        # Draw positive
-        for m_,b_ in zip(m_positive, b_positive):
-            x0 = -1000
-            y0 = int(m_*x0 + b_)
-            xf = 1000
-            yf = int(m_*xf + b_)
-            cv2.line(debug_rgb, (x0,y0), (xf,yf), (0, 0, 255), 2)
-        # Draw negative lines
-        for m_,b_ in zip(m_negative, b_negative):
-            x0 = -1000
-            y0 = int(m_*x0 + b_)
-            xf = 1000
-            yf = int(m_*xf + b_)
-            cv2.line(debug_rgb, (x0,y0), (xf,yf), (0, 0, 255), 2)
-        
-        return debug_rgb, s_x/N, s_y/N
+        # Draw line
+        x0, xf = -1000, 1000
+        y0, yf = int(m*x0 + b), int(m*xf + b)
+        cv2.line(debug_rgb, (x0,y0), (xf,yf), (0, 0, 255), 2)
+
+        return debug_rgb, m, b
 
     @staticmethod
-    def get_point_other(img, lower_white, upper_white, epsilon, slope, lookahead):
-        # Pre-processing
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, lower_white, upper_white)
-        edges = cv2.Canny(mask, 500, 1200)
-        debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+    def transform(m, b, H):
+        l = np.array([[-m, 1, 0]])
+        l_transformed = l @ np.linalg.inv(H)
+        c_x, c_y, c_1 = l_transformed[0,0], l_transformed[0,1], l_transformed[0,2]
+        return -c_x/c_y, (b-c_1)/c_y
+    
+    @staticmethod
+    def intersection(m, b, r):
+        x1, y1 = -10, m*-10 + b
+        x2, y2 = 10, m*10 + b
+        dx = x2-x1
+        dy = y2-y1
+        dr = np.sqrt(dx**2 + dy**2)
+        D = x1*y2 - x2*y1
+        Delta = (r**2)*(dr**2) - D**2
+        if Delta > 0:
+            if (D*dy + np.sign(dy)*dx*np.sqrt(Delta))/dr**2 >= 0:
+                return (D*dy + np.sign(dy)*dx*np.sqrt(Delta))/dr**2, (-D*dx + abs(dy)*np.sqrt(Delta))/dr**2
+            else:
+                return (D*dy - np.sign(dy)*dx*np.sqrt(Delta))/dr**2, (-D*dx - abs(dy)*np.sqrt(Delta))/dr**2
 
-        # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
-        lines = cv2.HoughLines(edges, 1, np.pi/180, 130)
-        r, theta = lines[:,0,0], lines[:,0,1]
-        c, s = np.cos(theta), np.sin(theta) + epsilon # Add to not divide by 0
-        m, b = -c/s, r/s
-        m_positive, b_positive = m[m > slope], b[m > slope] # Select for vertical lines
-        N_positive = m_positive.shape[0]
-        m_negative, b_negative = m[m < -slope], b[m < -slope] # Select for vertical lines
-        N_negative = m_negative.shape[0]
-
-        x_intersections = []
-        y_intersections = []
-        lines = []
-        for i in range(N_positive):
-            for j in range(N_negative):
-                x = (b_positive[i] - b_negative[j]) / (m_negative[j] - m_positive[i])
-                y = m_positive[i]*x + b_positive[i]
-                x_intersections.append(x)
-                y_intersections.append(y)
-                lines.append((m_positive[i], b_positive[i], m_negative[j], b_negative[j]))
-        mp, bp, mn, bn = lines[np.argmin(y_intersections)]
-        
-        # Draw lines
-        x0 = -1000
-        y0 = int(mp*x0 + bp)
-        xf = 1000
-        yf = int(mp*xf + bp)
-        cv2.line(debug_rgb, (x0,y0), (xf,yf), (0, 0, 255), 2)
-        y0 = int(mn*x0 + bn)
-        yf = int(mn*xf + bn)
-        cv2.line(debug_rgb, (x0,y0), (xf,yf), (0, 0, 255), 2)
-
-        x = (lookahead - bp) / mp
-        offset = 20
-        return debug_rgb, x - offset, lookahead
+    def draw_marker(self, x, y):
+        marker = Marker()
+        marker.header.frame_id = 'base_link'
+        marker.type = marker.CYLINDER
+        marker.action = marker.ADD
+        marker.scale.x = .2
+        marker.scale.y = .2
+        marker.scale.z = .2
+        marker.color.a = 1.0
+        marker.color.r = 1.0
+        marker.color.g = .5
+        marker.pose.orientation.w = 1.0
+        marker.pose.position.x = x
+        marker.pose.position.y = y
+        self.marker_pub.publish(marker)
+            
 
 def main(args=None):
     rclpy.init(args=args)
