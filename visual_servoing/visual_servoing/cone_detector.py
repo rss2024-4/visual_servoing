@@ -95,14 +95,13 @@ class ConeDetector(Node):
         self.marker_pub = self.create_publisher(Marker, "/point_marker", 1)
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
 
-        # TODO tune lookahead
         H, _= cv2.findHomography(PTS_IMAGE_PLANE, PTS_GROUND_PLANE)
         self.H_inv = np.linalg.inv(H)
-        self.slope = 0.3
+        self.slope = 4
         self.epsilon = 1e-5
-        self.dist_from_line = 1.22/2 # Meters
+        self.dist_from_line = .25 # Meters
         self.lookahead = 4.0 # Meters
-        sensitivity = 55
+        sensitivity = 45
         self.lower_white = np.array([0, 0, 255-sensitivity])
         self.upper_white = np.array([255, sensitivity, 255])
 
@@ -111,9 +110,7 @@ class ConeDetector(Node):
     def image_callback(self, image_msg):
         img = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
         y, _, _ = img.shape
-        # TODO find a good crop
-        img[0:5*y//10] = 0
-        # img[4*y//5:y] = 0
+        img[:6*y//10] = 0
         debug_img, m, b = self.get_line(img)
 
         # Transform line
@@ -146,11 +143,11 @@ class ConeDetector(Node):
         debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
 
         # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
-        lines = cv2.HoughLines(edges, 1, np.pi/180, 130)
+        lines = cv2.HoughLines(edges, 1, np.pi/180, 50)
         r, theta = lines[:,0,0], lines[:,0,1]
         c, s = np.cos(theta), np.sin(theta) + self.epsilon # Add to not divide by 0
         m, b = -c/s, r/s
-        selection = m > self.slope
+        selection = m < -self.slope
         m_selected, b_selected = m[selection], b[selection] # Select for vertical lines on right
 
         m, b = np.mean(m_selected), np.mean(b_selected)
