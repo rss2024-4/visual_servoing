@@ -157,7 +157,6 @@ class ConeDetector(Node):
 
         # Draw line
         self.draw_lines(debug_rgb, [m], [b])
-
         return debug_rgb, m, b
 
     def transform(self, m, b):
