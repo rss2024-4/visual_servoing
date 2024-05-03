@@ -16,7 +16,7 @@ from vs_msgs.msg import ConeLocation
 # import your color segmentation algorithm; call this function in ros_image_callback!
 from computer_vision.color_segmentation import cd_color_segmentation
 
-PTS_IMAGE_PLANE = np.array([
+PTS_IMAGE_PLANE = [
 	[334., 315.],
 	[336., 272.],
 	[334., 246.],
@@ -45,11 +45,9 @@ PTS_IMAGE_PLANE = np.array([
 	[431., 179.],
 	[231., 178.],
 	[135., 178.],
-], dtype=np.float64)
-PTS_IMAGE_PLANE *= 0.0254
-PTS_IMAGE_PLANE = np.flip(PTS_IMAGE_PLANE, axis=1)
+]
 
-PTS_GROUND_PLANE = np.array([
+PTS_GROUND_PLANE = [
 	[15, 0],
 	[20, 0],
 	[25, 0],
@@ -78,8 +76,13 @@ PTS_GROUND_PLANE = np.array([
 	[70, -20],
 	[70, 20],
 	[70, 39],
-], dtype=np.float64)
-PTS_GROUND_PLANE *= 0.0254
+]
+
+pts_img = np.array(PTS_IMAGE_PLANE, dtype=np.float64)
+pts_img = np.flip(pts_img, axis=1)
+
+pts_ground = np.array(PTS_GROUND_PLANE, dtype=np.float64)
+pts_ground *= 0.0254
 
 class ConeDetector(Node):
     """
@@ -99,7 +102,7 @@ class ConeDetector(Node):
         self.marker_pub = self.create_publisher(Marker, "/point_marker", 1)
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
 
-        H, _= cv2.findHomography(PTS_IMAGE_PLANE, PTS_GROUND_PLANE)
+        H, _= cv2.findHomography(pts_img, pts_ground)
         self.H_inv = np.linalg.inv(H)
         self.slope = 4
         self.epsilon = 1e-5
@@ -120,11 +123,13 @@ class ConeDetector(Node):
         # Transform line
         m_W, b_W = self.transform(m, b)
         m_T, b_T = m_W, self.dist_from_line*np.sqrt(1 + (m_W**2)) + b_W
-        point = self.intersection(m_T, b_T, self.lookahead)
-        if point is not None:
-            x, y = point
-        else:
-            x, y = 0, 0
+        # point = self.intersection(m_T, b_T, self.lookahead)
+        # if point is not None:
+        #     x, y = point
+        # else:
+        #     x, y = 0, 0
+        x = self.lookahead
+        y = m_T*x + b_T
 
         # Debug
         self.draw_marker(x, y)
@@ -161,10 +166,10 @@ class ConeDetector(Node):
         return debug_rgb, m, b
 
     def transform(self, m, b):
-        l = np.array([[-m, 1, 0]])
+        l = np.array([[m, -1, b]])
         l_transformed = l @ self.H_inv
         c_x, c_y, c_1 = l_transformed[0,0], l_transformed[0,1], l_transformed[0,2]
-        return -c_x/c_y, (b-c_1)/c_y
+        return -c_x/c_y, -c_1/c_y
     
     @staticmethod
     def draw_lines(img, m, b):
