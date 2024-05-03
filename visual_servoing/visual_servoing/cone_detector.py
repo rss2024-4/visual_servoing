@@ -45,7 +45,10 @@ PTS_IMAGE_PLANE = np.array([
 	[431., 179.],
 	[231., 178.],
 	[135., 178.],
-])
+], dtype=np.float64)
+PTS_IMAGE_PLANE *= 0.0254
+PTS_IMAGE_PLANE = np.flip(PTS_IMAGE_PLANE, axis=1)
+
 PTS_GROUND_PLANE = np.array([
 	[15, 0],
 	[20, 0],
@@ -75,7 +78,8 @@ PTS_GROUND_PLANE = np.array([
 	[70, -20],
 	[70, 20],
 	[70, 39],
-])
+], dtype=np.float64)
+PTS_GROUND_PLANE *= 0.0254
 
 class ConeDetector(Node):
     """
@@ -147,7 +151,7 @@ class ConeDetector(Node):
         r, theta = lines[:,0,0], lines[:,0,1]
         c, s = np.cos(theta), np.sin(theta) + self.epsilon # Add to not divide by 0
         m, b = -c/s, r/s
-        selection = m < -self.slope
+        selection = m > self.slope
         m_selected, b_selected = m[selection], b[selection] # Select for vertical lines on right
 
         m, b = np.mean(m_selected), np.mean(b_selected)
