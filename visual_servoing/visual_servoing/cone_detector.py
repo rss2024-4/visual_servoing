@@ -102,12 +102,13 @@ class ConeDetector(Node):
         self.marker_pub = self.create_publisher(Marker, "/point_marker", 1)
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
 
-        H, _= cv2.findHomography(pts_img, pts_ground)
-        self.H_inv = np.linalg.inv(H)
+        self.H, _= cv2.findHomography(pts_img, pts_ground)
+        self.H_inv = np.linalg.inv(self.H)
         self.slope = 4
         self.epsilon = 1e-5
         self.dist_from_line = .25 # Meters
         self.lookahead = 4.0 # Meters
+        self.lookahead_px = 500
         sensitivity = 45
         self.lower_white = np.array([0, 0, 255-sensitivity])
         self.upper_white = np.array([255, sensitivity, 255])
@@ -117,25 +118,29 @@ class ConeDetector(Node):
     def image_callback(self, image_msg):
         img = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
         y, _, _ = img.shape
-        img[:6*y//10] = 0
-        debug_img, m, b = self.get_line(img)
+        img[:8*y//14] = 0
+        debug_img, x, y = self.get_point_no_transform(img)
+        x, y = self.transform_point(x, y)
+        
+        ##### FOR OTHER METHOD NOT MIDPOINT #####
+        # debug_img, m, b = self.get_line(img)
 
         # Transform line
-        m_W, b_W = self.transform(m, b)
-        m_T, b_T = m_W, self.dist_from_line*np.sqrt(1 + (m_W**2)) + b_W
+        # m_W, b_W = self.transform_line(m, b)
+        # m_T, b_T = m_W, self.dist_from_line*np.sqrt(1 + (m_W**2)) + b_W
         # point = self.intersection(m_T, b_T, self.lookahead)
         # if point is not None:
         #     x, y = point
         # else:
         #     x, y = 0, 0
-        x = self.lookahead
-        y = m_T*x + b_T
+        # x = self.lookahead
+        # y = m_T*x + b_T
 
         # Debug
         self.draw_marker(x, y)
-        self.get_logger().info(f"Equation of line in image is: y = {m}*x + {b}")
-        self.get_logger().info(f"Equation of line from homography is: y = {m_W}*x + {b_W}")
-        self.get_logger().info(f"Line to follow is: y = {m_T}*x + {b_T}")
+        # self.get_logger().info(f"Equation of line in image is: y = {m}*x + {b}")
+        # self.get_logger().info(f"Equation of line from homography is: y = {m_W}*x + {b_W}")
+        # self.get_logger().info(f"Line to follow is: y = {m_T}*x + {b_T}")
         self.get_logger().info(f"Point to follow is: ({x}, {y})")
         debug_msg = self.bridge.cv2_to_imgmsg(debug_img, "bgr8")
         self.debug_pub.publish(debug_msg)
@@ -165,12 +170,44 @@ class ConeDetector(Node):
         self.draw_lines(debug_rgb, [m], [b])
         return debug_rgb, m, b
 
-    def transform(self, m, b):
+    def transform_line(self, m, b):
         l = np.array([[m, -1, b]])
         l_transformed = l @ self.H_inv
         c_x, c_y, c_1 = l_transformed[0,0], l_transformed[0,1], l_transformed[0,2]
         return -c_x/c_y, -c_1/c_y
     
+    def transform_point(self, x, y):
+        p = np.array([[x],[y],[1]])
+        pn = self.H @ p
+        return pn[0, 0], pn[1, 0]
+    
+    def get_point_no_transform(self, img):
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, self.lower_white, self.upper_white)
+        edges = cv2.Canny(mask, 500, 1200)
+        debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+
+        # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
+        lines = cv2.HoughLines(edges, 1, np.pi/180, 50)
+        r, theta = lines[:,0,0], lines[:,0,1]
+        c, s = np.cos(theta), np.sin(theta) + self.epsilon # Add to not divide by 0
+        m, b = -c/s, r/s
+        right, left = m > self.slope, m < self.slope
+        m_right, b_right = m[right], b[right] # Select for vertical lines on right
+        m_left, b_left = m[left], b[left]
+
+        m_right, b_right = np.mean(m_right), np.mean(b_right)
+        m_left, b_left = np.mean(m_left), np.mean(b_left)
+        self.draw_lines(debug_rgb, [m_right, m_left], [b_right, b_left])
+
+        y = self.lookahead_px
+        x_left = (y-b_left)/m_left
+        x_right = (y-b_right)/m_right
+        x = (x_left+x_right)/2
+
+        cv2.circle(debug_rgb, (int(x), int(y)), 5, (0, 255, 0), -1)
+        return debug_rgb, x, y
+
     @staticmethod
     def draw_lines(img, m, b):
         for m, b in zip(m,b):
