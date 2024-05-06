@@ -179,6 +179,7 @@ class ConeDetector(Node):
     def transform_point(self, x, y):
         p = np.array([[x],[y],[1]])
         pn = self.H @ p
+        pn = pn / pn[2, 0]
         return pn[0, 0], pn[1, 0]
     
     def get_point_no_transform(self, img):
