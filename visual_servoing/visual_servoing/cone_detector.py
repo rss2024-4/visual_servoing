@@ -119,10 +119,8 @@ class ConeDetector(Node):
         y, _, _ = img.shape
         img[:6*y//10] = 0
         debug_img, m, b = self.get_line(img)
-
-        # Transform line
-        m_W, b_W = self.transform(m, b)
-        m_T, b_T = m_W, self.dist_from_line*np.sqrt(1 + (m_W**2)) + b_W
+        m_W, b_W = self.transform(m, b) # Transform to world
+        m_T, b_T = m_W, self.dist_from_line*np.sqrt(1 + (m_W**2)) + b_W # Transpose
         # point = self.intersection(m_T, b_T, self.lookahead)
         # if point is not None:
         #     x, y = point
