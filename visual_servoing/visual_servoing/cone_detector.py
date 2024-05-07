@@ -144,7 +144,7 @@ class ConeDetector(Node):
 
     def timer_cb(self):
         error = self.img_center - self.x
-        u = self.kp*error + self.kd*((error - self.last_error)/.05) + self.ki*(error + self.sum_prev_error)
+        u = self.kp*error + self.kd*((error - self.last_error)/.05) + self.ki*(self.sum_prev_error)
         self.last_error = error
         self.sum_prev_error += error
 
