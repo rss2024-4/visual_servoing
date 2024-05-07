@@ -107,7 +107,7 @@ class ConeDetector(Node):
 
         self.H, _= cv2.findHomography(pts_img, pts_ground)
         self.H_inv = np.linalg.inv(self.H)
-        self.slope = 0
+        self.slope = 0.1
         self.epsilon = 1e-5
         self.dist_from_line = .25 # Meters
         self.lookahead = 4.0 # Meters
@@ -186,7 +186,7 @@ class ConeDetector(Node):
         r, theta = lines[:,0,0], lines[:,0,1]
         c, s = np.cos(theta), np.sin(theta)
         m, b = -c/s, r/s
-        right, left = m > self.slope, m < self.slope
+        right, left = m > self.slope, m < -self.slope
         m_right, b_right = m[right], b[right] # Select for vertical lines on right
         m_left, b_left = m[left], b[left]
 
