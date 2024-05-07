@@ -84,6 +84,9 @@ pts_img = np.flip(pts_img, axis=1)
 pts_ground = np.array(PTS_GROUND_PLANE, dtype=np.float64)
 pts_ground *= 0.0254
 
+DILATION_FACTOR = 3
+DILATION_KERNEL = np.ones((DILATION_FACTOR, DILATION_FACTOR), np.uint8)
+
 class ConeDetector(Node):
     """
     A class for applying your cone detection algorithms to the real robot.
@@ -143,10 +146,11 @@ class ConeDetector(Node):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, self.lower_white, self.upper_white)
         edges = cv2.Canny(mask, 500, 1200)
+        edges = cv2.dilate(edges, DILATION_KERNEL, iterations=1)
         debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
 
         # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
-        lines = cv2.HoughLines(edges, 1, np.pi/180, 50)
+        lines = cv2.HoughLines(edges, 1, np.pi/180, 100)
         r, theta = lines[:,0,0], lines[:,0,1]
         c, s = np.cos(theta), np.sin(theta)
         m, b = -c/s, r/s
