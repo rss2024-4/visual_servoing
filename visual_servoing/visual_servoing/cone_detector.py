@@ -7,6 +7,8 @@ import numpy as np
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker
+from ackermann_msgs.msg import AckermannDriveStamped
+
 
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Point #geometry_msgs not in CMake file
@@ -100,19 +102,28 @@ class ConeDetector(Node):
         self.debug_pub = self.create_publisher(Image, "/debug_img", 10)
         self.image_sub = self.create_subscription(Image, "/zed/zed_node/rgb/image_rect_color", self.image_callback, 5)
         self.marker_pub = self.create_publisher(Marker, "/point_marker", 1)
+        self.drive_pub = self.create_publisher(AckermannDriveStamped, "/vesc/low_level/input/navigation", 10)
+        self.create_timer(0.05, self.timer_cb)
+
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
 
         self.H, _= cv2.findHomography(pts_img, pts_ground)
         self.H_inv = np.linalg.inv(self.H)
         self.slope = 0
         self.epsilon = 1e-5
-        self.dist_from_line = .25 # Meters
-        self.lookahead = 4.0 # Meters
-        self.lookahead_px = 175
-        self.last_y = 0
+        self.img_center = 100 # in px
         sensitivity = 45
         self.lower_white = np.array([0, 0, 255-sensitivity])
         self.upper_white = np.array([255, sensitivity, 255])
+
+        self.kp = 1.0
+        self.kd = 0.1
+        self.ki = 0.0
+
+        self.angle = 0.0
+        self.speed = 4.0
+        self.last_error = 0.0
+        self.sum_prev_error = 0.0
 
         self.get_logger().info("Cone Detector Initialized")
 
@@ -121,16 +132,8 @@ class ConeDetector(Node):
         y, _, _ = img.shape
         img[:8*y//14] = 0
         debug_img, x, y = self.get_point_no_transform(img)
-        x, y = self.transform_point(x, y)
-
-        # Smoothing in y
-        if abs(y - self.last_y) > 0.2:
-            y = self.last_y
-        self.last_y = y
-
+        self.x = x
         # Debug
-        self.draw_marker(x, y)
-        self.get_logger().info(f"Point to follow is: ({x}, {y})")
         debug_msg = self.bridge.cv2_to_imgmsg(debug_img, "bgr8")
         self.debug_pub.publish(debug_msg)
 
@@ -138,38 +141,17 @@ class ConeDetector(Node):
         p.x_pos = x
         p.y_pos = y
         self.cone_pub.publish(p)
-    
-    def get_line(self, img):
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, self.lower_white, self.upper_white)
-        edges = cv2.Canny(mask, 500, 1200)
-        debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
 
-        # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
-        lines = cv2.HoughLines(edges, 1, np.pi/180, 50)
-        r, theta = lines[:,0,0], lines[:,0,1]
-        c, s = np.cos(theta), np.sin(theta)
-        m, b = -c/s, r/s
-        selection = m > self.slope
-        m_selected, b_selected = m[selection], b[selection] # Select for vertical lines on right
+    def timer_cb(self):
+        error = self.img_center - self.x
+        u = self.kp*error + self.kd*((error - self.last_error)/.05) + self.ki*(error + self.sum_prev_error)
+        self.last_error = error
+        self.sum_prev_error += error
 
-        m, b = np.mean(m_selected), np.mean(b_selected)
-
-        # Draw line
-        self.draw_lines(debug_rgb, [m], [b])
-        return debug_rgb, m, b
-
-    def transform_line(self, m, b):
-        l = np.array([[m, -1, b]])
-        l_transformed = l @ self.H_inv
-        c_x, c_y, c_1 = l_transformed[0,0], l_transformed[0,1], l_transformed[0,2]
-        return -c_x/c_y, -c_1/c_y
-    
-    def transform_point(self, x, y):
-        p = np.array([[x],[y],[1]])
-        pn = self.H @ p
-        pn = pn / pn[2, 0]
-        return pn[0, 0], pn[1, 0]
+        drive_cmd = AckermannDriveStamped()
+        drive_cmd.drive.steering_angle = u
+        drive_cmd.drive.speed = self.speed
+        self.drive_pub.publish(drive_cmd)
     
     def get_point_no_transform(self, img):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -180,7 +162,7 @@ class ConeDetector(Node):
         # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
         lines = cv2.HoughLines(edges, 1, np.pi/180, 50)
         r, theta = lines[:,0,0], lines[:,0,1]
-        c, s = np.cos(theta), np.sin(theta)
+        c, s = np.cos(theta), np.sin(theta) + self.epsilon
         m, b = -c/s, r/s
         right, left = m > self.slope, m < self.slope
         m_right, b_right = m[right], b[right] # Select for vertical lines on right
@@ -204,37 +186,6 @@ class ConeDetector(Node):
             x0, xf = -1000, 1000
             y0, yf = int(m*x0 + b), int(m*xf + b)
             cv2.line(img, (x0,y0), (xf,yf), (0, 0, 255), 2)
-    
-    @staticmethod
-    def intersection(m, b, r):
-        x1, y1 = -10, m*-10 + b
-        x2, y2 = 10, m*10 + b
-        dx = x2-x1
-        dy = y2-y1
-        dr = np.sqrt(dx**2 + dy**2)
-        D = x1*y2 - x2*y1
-        Delta = (r**2)*(dr**2) - D**2
-        if Delta > 0:
-            if (D*dy + np.sign(dy)*dx*np.sqrt(Delta))/dr**2 >= 0:
-                return (D*dy + np.sign(dy)*dx*np.sqrt(Delta))/dr**2, (-D*dx + abs(dy)*np.sqrt(Delta))/dr**2
-            else:
-                return (D*dy - np.sign(dy)*dx*np.sqrt(Delta))/dr**2, (-D*dx - abs(dy)*np.sqrt(Delta))/dr**2
-
-    def draw_marker(self, x, y):
-        marker = Marker()
-        marker.header.frame_id = 'base_link'
-        marker.type = marker.CYLINDER
-        marker.action = marker.ADD
-        marker.scale.x = .2
-        marker.scale.y = .2
-        marker.scale.z = .2
-        marker.color.a = 1.0
-        marker.color.r = 1.0
-        marker.color.g = .5
-        marker.pose.orientation.w = 1.0
-        marker.pose.position.x = x
-        marker.pose.position.y = y
-        self.marker_pub.publish(marker)
             
 
 def main(args=None):
