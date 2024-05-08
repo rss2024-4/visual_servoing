@@ -84,9 +84,6 @@ pts_img = np.flip(pts_img, axis=1)
 pts_ground = np.array(PTS_GROUND_PLANE, dtype=np.float64)
 pts_ground *= 0.0254
 
-DILATION_FACTOR = 3
-DILATION_KERNEL = np.ones((DILATION_FACTOR, DILATION_FACTOR), np.uint8)
-
 class ConeDetector(Node):
     """
     A class for applying your cone detection algorithms to the real robot.
@@ -107,12 +104,13 @@ class ConeDetector(Node):
 
         self.H, _= cv2.findHomography(pts_img, pts_ground)
         self.H_inv = np.linalg.inv(self.H)
-        self.slope = 0.1
+        self.slope = 0.2
         self.epsilon = 1e-5
-        self.dist_from_line = .25 # Meters
-        self.lookahead = 4.0 # Meters
-        self.lookahead_px = 175
-        self.last_y = 0
+        self.lookahead_px = 30
+        self.last_y_buffer = [0, 0, 0]
+
+        dilation_factor = 3
+        self.dilation_kernel = np.ones((dilation_factor, dilation_factor), np.uint8)
         sensitivity = 45
         self.lower_white = np.array([0, 0, 255-sensitivity])
         self.upper_white = np.array([255, sensitivity, 255])
@@ -122,14 +120,19 @@ class ConeDetector(Node):
     def image_callback(self, image_msg):
         img = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
         y, _, _ = img.shape
-        img[:8*y//14] = 0
+        img[:13*y//32] = 0
+        img[18*y//32:] = 0
         debug_img, x, y = self.get_point_no_transform(img)
         x, y = self.transform_point(x, y)
+        y -= 0.14
 
-        # Smoothing in y
-        if abs(y - self.last_y) > 0.2:
-            y = self.last_y
-        self.last_y = y
+        # Smoothing y
+        if len(self.last_y_buffer) > 3:
+            del self.last_y_buffer[0]
+        self.last_y_buffer.append(y)
+        y = np.mean(self.last_y_buffer)
+        if abs(y - self.last_y_buffer[-2]) > 0.15:
+            y = self.last_y_buffer[-2]
 
         # Debug
         self.draw_marker(x, y)
@@ -142,63 +145,40 @@ class ConeDetector(Node):
         p.y_pos = y
         self.cone_pub.publish(p)
     
-    def get_line(self, img):
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, self.lower_white, self.upper_white)
-        edges = cv2.Canny(mask, 500, 1200)
-        edges = cv2.dilate(edges, DILATION_KERNEL, iterations=1)
-        debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-
-        # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
-        lines = cv2.HoughLines(edges, 1, np.pi/180, 100)
-        r, theta = lines[:,0,0], lines[:,0,1]
-        c, s = np.cos(theta), np.sin(theta)
-        m, b = -c/s, r/s
-        selection = m > self.slope
-        m_selected, b_selected = m[selection], b[selection] # Select for vertical lines on right
-
-        m, b = np.mean(m_selected), np.mean(b_selected)
-
-        # Draw line
-        self.draw_lines(debug_rgb, [m], [b])
-        return debug_rgb, m, b
-
-    def transform_line(self, m, b):
-        l = np.array([[m, -1, b]])
-        l_transformed = l @ self.H_inv
-        c_x, c_y, c_1 = l_transformed[0,0], l_transformed[0,1], l_transformed[0,2]
-        return -c_x/c_y, -c_1/c_y
-    
     def transform_point(self, x, y):
         p = np.array([[x],[y],[1]])
         pn = self.H @ p
-        pn = pn / pn[2, 0]
-        return pn[0, 0], pn[1, 0]
+        return pn[0, 0] / pn[2, 0], pn[1, 0] / pn[2, 0]
     
     def get_point_no_transform(self, img):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, self.lower_white, self.upper_white)
         edges = cv2.Canny(mask, 500, 1200)
+        edges = cv2.dilate(edges, self.dilation_kernel, iterations=1)
         debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
 
         # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
         lines = cv2.HoughLines(edges, 1, np.pi/180, 50)
         r, theta = lines[:,0,0], lines[:,0,1]
-        c, s = np.cos(theta), np.sin(theta)
+        c, s = np.cos(theta), np.sin(theta) + self.epsilon
         m, b = -c/s, r/s
         right, left = m > self.slope, m < -self.slope
-        m_right, b_right = m[right], b[right] # Select for vertical lines on right
-        m_left, b_left = m[left], b[left]
+        mr, br = m[right], b[right]
+        ml, bl = m[left], b[left]
 
-        m_right, b_right = np.mean(m_right), np.mean(b_right)
-        m_left, b_left = np.mean(m_left), np.mean(b_left)
-        self.draw_lines(debug_rgb, [m_right, m_left], [b_right, b_left])
+        mr, br = np.mean(mr), np.mean(br)
+        ml, bl = np.mean(ml), np.mean(bl)
 
-        y = self.lookahead_px
-        x_left = (y-b_left)/m_left
-        x_right = (y-b_right)/m_right
-        x = (x_left+x_right)/2
+        k = np.sqrt((mr**2 + 1)/(ml**2 + 1))
+        mb, bb = (-k*ml + mr)/(1 - k), (-k*bl + br)/(1 - k)
+        self.draw_lines(debug_rgb, [mr, ml, mb], [br, bl, bb])
 
+        intersection_x = (br - bl)/(ml - mr)
+        intersection_y = mr*intersection_x + br
+        y = intersection_y + self.lookahead_px
+        x = (y-bb)/mb
+
+        # cv2.circle(debug_rgb, (int(intersection_x), int(intersection_y)), 5, (255, 0, 0), -1)
         cv2.circle(debug_rgb, (int(x), int(y)), 5, (0, 255, 0), -1)
         return debug_rgb, x, y
 
@@ -208,21 +188,6 @@ class ConeDetector(Node):
             x0, xf = -1000, 1000
             y0, yf = int(m*x0 + b), int(m*xf + b)
             cv2.line(img, (x0,y0), (xf,yf), (0, 0, 255), 2)
-    
-    @staticmethod
-    def intersection(m, b, r):
-        x1, y1 = -10, m*-10 + b
-        x2, y2 = 10, m*10 + b
-        dx = x2-x1
-        dy = y2-y1
-        dr = np.sqrt(dx**2 + dy**2)
-        D = x1*y2 - x2*y1
-        Delta = (r**2)*(dr**2) - D**2
-        if Delta > 0:
-            if (D*dy + np.sign(dy)*dx*np.sqrt(Delta))/dr**2 >= 0:
-                return (D*dy + np.sign(dy)*dx*np.sqrt(Delta))/dr**2, (-D*dx + abs(dy)*np.sqrt(Delta))/dr**2
-            else:
-                return (D*dy - np.sign(dy)*dx*np.sqrt(Delta))/dr**2, (-D*dx - abs(dy)*np.sqrt(Delta))/dr**2
 
     def draw_marker(self, x, y):
         marker = Marker()
