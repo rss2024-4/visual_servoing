@@ -79,7 +79,7 @@ PTS_GROUND_PLANE = [
 ]
 
 pts_img = np.array(PTS_IMAGE_PLANE, dtype=np.float64)
-pts_img = np.flip(pts_img, axis=1)
+# pts_img = np.flip(pts_img, axis=1)
 
 pts_ground = np.array(PTS_GROUND_PLANE, dtype=np.float64)
 pts_ground *= 0.0254
