@@ -5,77 +5,23 @@ from rclpy.node import Node
 import numpy as np
 
 import cv2
-from cv_bridge import CvBridge, CvBridgeError
+from cv_bridge import CvBridge#, CvBridgeError
 from visualization_msgs.msg import Marker
 
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import Point #geometry_msgs not in CMake file
+# from geometry_msgs.msg import Point #geometry_msgs not in CMake file
 from vs_msgs.msg import ConeLocation
 
 
 # import your color segmentation algorithm; call this function in ros_image_callback!
-from computer_vision.color_segmentation import cd_color_segmentation
+# from computer_vision.color_segmentation import cd_color_segmentation
 
 PTS_IMAGE_PLANE = [
-	[334., 315.],
-	[336., 272.],
-	[334., 246.],
-	[332., 228.],
-	[334., 206.],
-	[334., 185.],
-	[334., 176.],
-	[332., 168.],
-	[442., 317.],
-	[562., 318.],
-	[321., 315.],
-	[108., 315.],
-	[500., 273.],
-	[244., 271.],
-	[157., 272.],
-	[67., 274.],
-	[444., 229.],
-	[560., 230.],
-	[271., 228.],
-	[214., 230.],
-	[96., 230.],
-	[433., 193.],
-	[539., 195.],
-	[225., 193.],
-	[119., 194.],
-	[431., 179.],
-	[231., 178.],
-	[135., 178.],
+
 ]
 
 PTS_GROUND_PLANE = [
-	[15, 0],
-	[20, 0],
-	[25, 0],
-	[30, 0],
-	[40, 0],
-	[60, 0],
-	[80, 0],
-	[100, 0],
-	[15, -5],
-	[15, -10],
-	[15, 5],
-	[15, 10],
-	[20, -10],
-	[20, 5],
-	[20, 10],
-	[20, 15],
-	[30, -10],
-	[30, -20],
-	[30, 5],
-	[30, 10],
-	[30, 20],
-	[50, -15],
-	[50, -30],
-	[50, 15],
-	[50, 30],
-	[70, -20],
-	[70, 20],
-	[70, 39],
+
 ]
 
 pts_img = np.array(PTS_IMAGE_PLANE, dtype=np.float64)
