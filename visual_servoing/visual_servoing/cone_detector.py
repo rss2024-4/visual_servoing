@@ -125,7 +125,7 @@ class ConeDetector(Node):
         self.ki = 0.0
 
         self.angle = 0.0
-        self.speed = 4.0
+        self.speed = 1.5
         self.last_error = 0.0
         self.sum_prev_error = 0.0
 
