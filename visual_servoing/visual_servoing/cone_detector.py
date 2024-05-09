@@ -104,11 +104,12 @@ class ConeDetector(Node):
 
         self.H, _= cv2.findHomography(pts_img, pts_ground)
         self.H_inv = np.linalg.inv(self.H)
-        self.slope = 0.2
+        self.slope = 0.25
         self.epsilon = 1e-5
         self.lookahead_px = 30
-        self.last_y = 0
-        self.last_x = 0
+        self.last_y = 0.0
+        self.last_x = 0.0
+        self.y_buffer = [0,0,0]
 
         dilation_factor = 2
         self.dilation_kernel = np.ones((dilation_factor, dilation_factor), np.uint8)
@@ -121,17 +122,19 @@ class ConeDetector(Node):
     def image_callback(self, image_msg):
         img = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
         y, _, _ = img.shape
-        img[:13*y//32] = 0
-        img[22*y//32:] = 0
+        img[:12*y//32] = 0
+        img[20*y//32:] = 0
         debug_img, x, y = self.get_point_no_transform(img)
         if debug_img is None:
+            debug_img = img
             x, y = self.last_x, self.last_y
         else:
             x, y = self.transform_point(x, y)
-            y -= 0.14
+            # y -= 0.0105 # CW
+            # y -= 0.0095 # CCW
 
         # Smoothing y
-        if abs(y - self.last_y) < 0.1:
+        if abs(y - self.last_y) < 0.05:
             y = self.last_y
         self.last_y = y
         self.last_x = x
@@ -160,6 +163,8 @@ class ConeDetector(Node):
 
         # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
         lines = cv2.HoughLines(dilated, 1, np.pi/180, 50)
+        if lines is None:
+            return None, None, None
         r, theta = lines[:,0,0], lines[:,0,1]
         c, s = np.cos(theta), np.sin(theta) + self.epsilon
         m, b = -c/s, r/s
