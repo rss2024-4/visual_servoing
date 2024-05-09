@@ -17,11 +17,17 @@ from vs_msgs.msg import ConeLocation
 # from computer_vision.color_segmentation import cd_color_segmentation
 
 PTS_IMAGE_PLANE = [
-    
+    [118, 263],
+    [294, 226],
+    [356, 243],
+    [548, 249],
 ]
 
 PTS_GROUND_PLANE = [
-
+    [20.375, 18    ],
+    [36.25,  6.56  ],
+    [27.25,  0     ],
+    [24.25,  -16.75],
 ]
 
 pts_img = np.array(PTS_IMAGE_PLANE, dtype=np.float64)
