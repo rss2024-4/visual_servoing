@@ -17,17 +17,65 @@ from vs_msgs.msg import ConeLocation
 # from computer_vision.color_segmentation import cd_color_segmentation
 
 PTS_IMAGE_PLANE = [
-    [118, 263],
-    [294, 226],
-    [356, 243],
-    [548, 249],
+	[334., 315.],
+	[336., 272.],
+	[334., 246.],
+	[332., 228.],
+	[334., 206.],
+	[334., 185.],
+	[334., 176.],
+	[332., 168.],
+	[442., 317.],
+	[562., 318.],
+	[321., 315.],
+	[108., 315.],
+	[500., 273.],
+	[244., 271.],
+	[157., 272.],
+	[67., 274.],
+	[444., 229.],
+	[560., 230.],
+	[271., 228.],
+	[214., 230.],
+	[96., 230.],
+	[433., 193.],
+	[539., 195.],
+	[225., 193.],
+	[119., 194.],
+	[431., 179.],
+	[231., 178.],
+	[135., 178.],
 ]
 
 PTS_GROUND_PLANE = [
-    [20.375, 18    ],
-    [36.25,  6.56  ],
-    [27.25,  0     ],
-    [24.25,  -16.75],
+	[15, 0],
+	[20, 0],
+	[25, 0],
+	[30, 0],
+	[40, 0],
+	[60, 0],
+	[80, 0],
+	[100, 0],
+	[15, -5],
+	[15, -10],
+	[15, 5],
+	[15, 10],
+	[20, -10],
+	[20, 5],
+	[20, 10],
+	[20, 15],
+	[30, -10],
+	[30, -20],
+	[30, 5],
+	[30, 10],
+	[30, 20],
+	[50, -15],
+	[50, -30],
+	[50, 15],
+	[50, 30],
+	[70, -20],
+	[70, 20],
+	[70, 39],
 ]
 
 pts_img = np.array(PTS_IMAGE_PLANE, dtype=np.float64)
@@ -59,11 +107,12 @@ class ConeDetector(Node):
         self.slope = 0.2
         self.epsilon = 1e-5
         self.lookahead_px = 30
-        self.last_y_buffer = [0, 0, 0]
+        self.last_y = 0
+        self.last_x = 0
 
         dilation_factor = 3
         self.dilation_kernel = np.ones((dilation_factor, dilation_factor), np.uint8)
-        sensitivity = 45
+        sensitivity = 55
         self.lower_white = np.array([0, 0, 255-sensitivity])
         self.upper_white = np.array([255, sensitivity, 255])
 
@@ -75,19 +124,19 @@ class ConeDetector(Node):
         img[:13*y//32] = 0
         img[18*y//32:] = 0
         debug_img, x, y = self.get_point_no_transform(img)
-        x, y = self.transform_point(x, y)
-        y -= 0.14
+        if debug_img is None:
+            x, y = self.last_x, self.last_y
+        else:      
+            x, y = self.transform_point(x, y)
+            y -= 0.14
 
         # Smoothing y
-        if len(self.last_y_buffer) > 3:
-            del self.last_y_buffer[0]
-        self.last_y_buffer.append(y)
-        y = np.mean(self.last_y_buffer)
-        if abs(y - self.last_y_buffer[-2]) > 0.15:
-            y = self.last_y_buffer[-2]
+        if abs(y - self.last_y) < 0.1:
+            y = self.last_y
+        self.last_y = y
+        self.last_x = x
 
         # Debug
-        self.draw_marker(x, y)
         self.get_logger().info(f"Point to follow is: ({x}, {y})")
         debug_msg = self.bridge.cv2_to_imgmsg(debug_img, "bgr8")
         self.debug_pub.publish(debug_msg)
@@ -118,6 +167,9 @@ class ConeDetector(Node):
         mr, br = m[right], b[right]
         ml, bl = m[left], b[left]
 
+        if mr.size == 0 or br.size == 0 or ml.size == 0 or bl.size == 0:
+            return None, None, None
+
         mr, br = np.mean(mr), np.mean(br)
         ml, bl = np.mean(ml), np.mean(bl)
 
@@ -130,7 +182,6 @@ class ConeDetector(Node):
         y = intersection_y + self.lookahead_px
         x = (y-bb)/mb
 
-        # cv2.circle(debug_rgb, (int(intersection_x), int(intersection_y)), 5, (255, 0, 0), -1)
         cv2.circle(debug_rgb, (int(x), int(y)), 5, (0, 255, 0), -1)
         return debug_rgb, x, y
 
@@ -140,22 +191,6 @@ class ConeDetector(Node):
             x0, xf = -1000, 1000
             y0, yf = int(m*x0 + b), int(m*xf + b)
             cv2.line(img, (x0,y0), (xf,yf), (0, 0, 255), 2)
-
-    def draw_marker(self, x, y):
-        marker = Marker()
-        marker.header.frame_id = 'base_link'
-        marker.type = marker.CYLINDER
-        marker.action = marker.ADD
-        marker.scale.x = .2
-        marker.scale.y = .2
-        marker.scale.z = .2
-        marker.color.a = 1.0
-        marker.color.r = 1.0
-        marker.color.g = .5
-        marker.pose.orientation.w = 1.0
-        marker.pose.position.x = x
-        marker.pose.position.y = y
-        self.marker_pub.publish(marker)
             
 
 def main(args=None):
