@@ -110,7 +110,7 @@ class ConeDetector(Node):
         self.last_y = 0
         self.last_x = 0
 
-        dilation_factor = 3
+        dilation_factor = 2
         self.dilation_kernel = np.ones((dilation_factor, dilation_factor), np.uint8)
         sensitivity = 55
         self.lower_white = np.array([0, 0, 255-sensitivity])
@@ -122,11 +122,11 @@ class ConeDetector(Node):
         img = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
         y, _, _ = img.shape
         img[:13*y//32] = 0
-        img[18*y//32:] = 0
+        img[22*y//32:] = 0
         debug_img, x, y = self.get_point_no_transform(img)
         if debug_img is None:
             x, y = self.last_x, self.last_y
-        else:      
+        else:
             x, y = self.transform_point(x, y)
             y -= 0.14
 
@@ -155,11 +155,11 @@ class ConeDetector(Node):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, self.lower_white, self.upper_white)
         edges = cv2.Canny(mask, 500, 1200)
-        edges = cv2.dilate(edges, self.dilation_kernel, iterations=1)
-        debug_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+        dilated = cv2.dilate(edges, self.dilation_kernel, iterations=1)
+        debug_rgb = cv2.cvtColor(dilated, cv2.COLOR_GRAY2BGR)
 
         # Work in normal polar coordinates one "distance" is 1 and one "angle" is pi/180 radians
-        lines = cv2.HoughLines(edges, 1, np.pi/180, 50)
+        lines = cv2.HoughLines(dilated, 1, np.pi/180, 50)
         r, theta = lines[:,0,0], lines[:,0,1]
         c, s = np.cos(theta), np.sin(theta) + self.epsilon
         m, b = -c/s, r/s
